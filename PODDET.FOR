@@ -1,5 +1,5 @@
 C=======================================================================
-C  PODDET, Subroutine, W. D. Batchelor
+C  TG_PODDET, Subroutine, W. D. Batchelor
 C-----------------------------------------------------------------------
 C  Computes pod detachment rates.
 C-----------------------------------------------------------------------
@@ -15,7 +15,7 @@ C-----------------------------------------------------------------------
 !  Calls:        ERROR, FIND, IGNORE
 C=======================================================================
 
-      SUBROUTINE PODDET(
+      SUBROUTINE TG_PODDET(
      &  FILECC, TGRO, WTLF, YRDOY, YRNR2,                 !Input
      &  PODWTD, SDNO, SHELN, SWIDOT,                      !Output
      &  WSHIDT, WTSD, WTSHE,                              !Output
@@ -119,13 +119,14 @@ C-----------------------------------------------------------------------
 !***********************************************************************
       ELSEIF (DYNAMIC .EQ. EMERG) THEN
 !-----------------------------------------------------------------------
+ !If only one harvest per year, we do not need to change the following codes for tree																					 
         DO 10 I = 1, NCOHORTS
-          DTC(I)    = 0.0
-          MSHELN(I) = 0.0
-          WPODY(I)  = 0.0
+          DTC(I)    = 0.0 !Pod detachment thermal time counter
+          MSHELN(I) = 0.0 !Maximum cohort shell mass (#/m2)
+          WPODY(I)  = 0.0 !Pod mass  for cohort J (g/m2)
           DAYS(I)   = 0.0
    10   ENDDO
-        PODWTD = 0.0
+        PODWTD = 0.0      !Mass of detached pods (g[pods] / m2[ground])
 
 !***********************************************************************
 !***********************************************************************
@@ -270,7 +271,7 @@ C       curve based on Drew control, disease and Lowman tag pod cohort study
       ENDIF
 !***********************************************************************
       RETURN
-      END ! SUBROUTINE PODDET
+      END SUBROUTINE TG_PODDET
 !=======================================================================
 
 !***********************************************************************

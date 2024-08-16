@@ -1,5 +1,5 @@
 C=======================================================================
-C  ROOTS, Subroutine, G. Hoogenboom, J.W. Jones
+C  TG_ROOTS, Subroutine, G. Hoogenboom, J.W. Jones
 C-----------------------------------------------------------------------
 C
 C  Calculates root growth, extension, respiration, and senescence
@@ -24,12 +24,13 @@ C  05/11/1999 GH  Incorporated in CROPGRO
 !  01/19/2006 CHP Fixed discrepancies between plant root senescence  
 !                 calculated and that sent to soil routines for addition
 !                 to organic matter.  
+!  03/14/2012 JZW Add the input argument PLME for read I File when PLME = "T" 																			  
 !-----------------------------------------------------------------------
 !  Called by  :  PLANT
 !  Calls      :  IPROOT, INROOT
 !=======================================================================
 
-       SUBROUTINE ROOTS(DYNAMIC,
+       SUBROUTINE TG_ROOTS(DYNAMIC, Control,
      &    AGRRT, CROP, DLAYR, DS, DTX, DUL, FILECC, FRRT, !Input
      &    ISWWAT, LL, NLAYR, PG, PLTPOP, RO, RP, RTWT,    !Input
      &    SAT, SW, SWFAC, VSTAGE, WR, WRDOTN, WTNEW,      !Input
@@ -40,10 +41,11 @@ C-----------------------------------------------------------------------
       USE ModuleDefs     !Definitions of constructed variable types, 
                          ! which contain control information, soil
                          ! parameters, hourly weather data.
+      USE Interface_Read_IFile							  
       IMPLICIT NONE
       SAVE
 
-      CHARACTER*1 ISWWAT
+      CHARACTER*1 ISWWAT, PLME
       CHARACTER*2 CROP
       CHARACTER*92 FILECC
 
@@ -74,6 +76,7 @@ C-----------------------------------------------------------------------
 !     TRLV_MIN  = conversion of RTWTMIN to RLV units per layer
       REAL TRLV_MIN, RLSENTOT, FACTOR, RTWTMIN
       REAL TotRootMass, CumRootMass
+      TYPE (ControlType) CONTROL								
 
 !***********************************************************************
 !***********************************************************************
@@ -81,34 +84,40 @@ C-----------------------------------------------------------------------
 !***********************************************************************
       IF (DYNAMIC .EQ. RUNINIT) THEN
 !-----------------------------------------------------------------------
-      CALL IPROOT(FILECC,                                 !Input
-     &  PORMIN, RFAC1, RLDSM, RTDEPI, RTEXF,              !Output
-     &  RTSEN, RTSDF, RTWTMIN, XRTFAC, YRTFAC)            !Output
+      !Add the following if statement by JZW
+      IF (CONTROL %RUN == 1 .OR. INDEX('FPQ',CONTROL%RNMODE) < 0) THEN																  
+        CALL TG_IPROOT(FILECC,                                 !Input
+     &    PORMIN, RFAC1, RLDSM, RTDEPI, RTEXF,              !Output
+     &    RTSEN, RTSDF, RTWTMIN, XRTFAC, YRTFAC)            !Output
 
-      DEPMAX = DS(NLAYR)
-
+        DEPMAX = DS(NLAYR)
+      endif
 !***********************************************************************
 !***********************************************************************
 !     Seasonal initialization - run once per season
 !***********************************************************************
       ELSEIF (DYNAMIC .EQ. SEASINIT) THEN
 !-----------------------------------------------------------------------
-      SRDOT = 0.0       
-      RLV   = 0.0
-      RTDEP = 0.0       
-      SENRT = 0.0
-      SUMEX = 0.0
-      SUMRL = 0.0
-      SATFAC = 0.0
+      IF (CONTROL%RUN .EQ.1 .OR. INDEX('QPF',CONTROL%RNMODE).LE. 0) THEN																		
+      SRDOT = 0.0 !Daily root senescence (g / m2 / d)     
+      RLV   = 0.0 !Root length density for soil layer L (cm[root] / cm3[soil])
+      RTDEP = 0.0 !Root depth (cm)  
+      SENRT = 0.0 !Daily senesced matter from roots in soil layer L
+      SUMEX = 0.0 !Sum over all layers of water excess factor times depth
+      SUMRL = 0.0 !Sum of root length density (integral over depth)
+      SATFAC = 0.0 !Root length weighted soil water excess stress factor
 
 !-----------------------------------------------------------------------
 C     ROOT DEPTH INCREASE RATE WITH TIME, cm/physiological day
 C-----------------------------------------------------------------------
 !      IF (CROP .NE. 'FA' .AND. ISWWAT .NE. 'N') THEN
-      IF (CROP .NE. 'FA') THEN
-        RFAC2 = TABEX(YRTFAC,XRTFAC,0.0,4)
-      ENDIF
-      
+        IF (CROP .NE. 'FA') THEN !RFAC2 Root depth increase rate with time (cm / physiol. day)
+          RFAC2 = TABEX(YRTFAC,XRTFAC,0.0,4)
+          !XRTFAC V-stage at which rate of increase in root depth per 
+          !physiological day is YRTFAC(I). (# leaf nodes)
+          !YRTFAC(I) Rate of increase in root depth per degree day at V-stage 
+        ENDIF
+      endif    
       CumRootMass = 0.0
 
 !***********************************************************************
@@ -122,22 +131,35 @@ C-----------------------------------------------------------------------
 !       day of emergence.  (GROW emergence initialization
 !       must preceed call to INROOT.)
 !-----------------------------------------------------------------------
-      CALL INROOT(
-     &  DLAYR, FRRT, NLAYR, PLTPOP, RFAC1, RTDEPI, WTNEW, !Input
-     &  RLV, RTDEP)                                       !Output
+      IF (CONTROL %RUN == 1 .OR. INDEX('FPQ',CONTROL%RNMODE) < 0) THEN
+        if (PLME .EQ. 'T')
+     &     CALL Read_IFile (CONTROL, RDPI=RTDEPI ) !RWAT= ,GSTI=VSTAGE 
+       
+      ! RDPI   Initial root depth (m) (ZRTI)
+      ! RWAI   Initial root weight (kg/ha) (WRTI)
+        CALL TG_INROOT(
+     &    DLAYR, FRRT, NLAYR, PLTPOP, RFAC1, RTDEPI, WTNEW, !Input
+     &    RLV, RTDEP)                                       !Output
 
-      RFAC3 = RFAC1
+        RFAC3 = RFAC1  !RFAC3: Ratio of root length to root weight at the current time (cm/g)
+                     !RFAC1: Root length per unit  root weight. (cm/g)
+        TRLV = 0.0     !TRLV: Total root length per square cm soil today
+        DO L = 1,NLAYR
+          TRLV = TRLV + RLV(L) * DLAYR(L) ! cm[root] / cm2[ground]
+        ENDDO
 
-      TRLV = 0.0
-      DO L = 1,NLAYR
-        TRLV = TRLV + RLV(L) * DLAYR(L) ! cm[root] / cm2[ground]
-      ENDDO
-
-      CumRootMass = WTNEW * FRRT * PLTPOP * 10. 
-!        kg[root]  g[tissue] g[root]    plants   kg/ha
-!        -------- = ----- * --------- * ------ * ----- 
-!           ha      plant   g[tissue]     m2      g/m2
-
+      !   FRRT: Fraction of vegetative tissue growth that goes to roots on a 
+      !             day (g[root] / g[veg])
+      !   FRRT      Fraction of vegetative tissue growth that goes to roots on a 
+      !             day (g[root] / g[veg])
+      !   PLTPOP    Plant population (# plants / m2)											
+        CumRootMass = WTNEW * FRRT * PLTPOP * 10. ! WTNEW: Initial mass of seedling or seed (g / plant) 
+!          kg[root]  g[tissue] g[root]    plants   kg/ha
+!          -------- = ----- * --------- * ------ * ----- 
+!             ha      plant   g[tissue]     m2      g/m2
+      ELSE
+        CumRootMass = 0.0  ! JZW it is wrong question???
+      ENDIF	   
 !***********************************************************************
 !***********************************************************************
 !     DAILY RATE/INTEGRATION
@@ -369,22 +391,22 @@ C     respiration, and update root length density for each layer.
       ENDIF
 !***********************************************************************
       RETURN
-      END SUBROUTINE ROOTS
+      END SUBROUTINE TG_ROOTS
 !=======================================================================
 
 
 !=======================================================================
-!  IPROOT Subroutine
+!  TG_IPROOT Subroutine
 !  Reads root parameters from input files.
 !----------------------------------------------------------------------
 !  REVISION HISTORY
 !  09/13/1998 CHP Written
 C  08/12/2003 CHP Added I/O error checking
 !-----------------------------------------------------------------------
-!  Called : ROOTS
+!  Called : TG_ROOTS
 !  Calls  : FIND, ERROR, IGNORE
 C=======================================================================
-      SUBROUTINE IPROOT(
+      SUBROUTINE TG_IPROOT(
      &  FILECC,                                           !Input
      &  PORMIN, RFAC1, RLDSM, RTDEPI, RTEXF,              !Output
      &  RTSEN, RTSDF, RTWTMIN, XRTFAC, YRTFAC)            !Output
@@ -455,11 +477,11 @@ C=======================================================================
 
 !***********************************************************************
       RETURN
-      END SUBROUTINE IPROOT
+      END SUBROUTINE TG_IPROOT
 !=======================================================================
 
 C=======================================================================
-C  INROOT Subroutine
+C  TG_INROOT Subroutine
 C  Initializes root variables at emergence.
 C----------------------------------------------------------------------
 C  REVISION HISTORY
@@ -470,7 +492,7 @@ C-----------------------------------------------------------------------
 C  Called : CROPGRO
 C  Calls  : None
 C=======================================================================
-      SUBROUTINE INROOT(
+      SUBROUTINE TG_INROOT(
      &  DLAYR, FRRT, NLAYR, PLTPOP, RFAC1, RTDEPI, WTNEW, !Input
      &  RLV, RTDEP)                                       !Output
 
@@ -520,7 +542,7 @@ C-----------------------------------------------------------------------
   300 CONTINUE
 !***********************************************************************
       RETURN
-      END SUBROUTINE INROOT
+      END SUBROUTINE TG_INROOT
 !=======================================================================
 
 !-----------------------------------------------------------------------
@@ -613,5 +635,5 @@ C-----------------------------------------------------------------------
 ! YRTFAC(I) Rate of increase in root depth per degree day at V-stage 
 !             XRTFAC(I). (cm / (physiol. day))
 !***********************************************************************
-!      END SUBROUTINES ROOTS, IPROOT, and INROOT
+!      END SUBROUTINES TG_ROOTS, TG_IPROOT, and TG_INROOT
 !=======================================================================

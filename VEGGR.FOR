@@ -1,5 +1,5 @@
 C=======================================================================
-C  VEGGR, Subroutine, J. W. Jones, K. J. Boote, G. Hoogenboom
+C  TG_VEGGR, Subroutine, J. W. Jones, K. J. Boote, G. Hoogenboom
 C  Calculates vegetative partitioning as a function of V stage,
 C  and limits growth prior to VSINK.
 C-----------------------------------------------------------------------
@@ -20,13 +20,14 @@ C  06/21/2001 GH  Modified seasonal initialization
 C  08/12/2003 CHP Added I/O error checking
 !  07/13/2006 CHP Added P model
 !  06/11/2007 CHP PStres2 affects growth
+!  03/14/2012 JZW Add the input argument PLME because TG_Canopy need read I File when PLME = "T" 																								 
 C-----------------------------------------------------------------------
 C  Called by: PLANT
 C  Calls:     CANOPY
 C             ERROR, FIND, IGNORE
 C========================================================================
 
-      SUBROUTINE VEGGR (DYNAMIC, 
+      SUBROUTINE TG_VEGGR (DYNAMIC, PLME,
      &    AGRLF, AGRRT, AGRSTM, CMINEP, CSAVEV, DTX,      !Input
      &    DXR57, ECONO, FILECC, FILEGC, FNINL, FNINR,     !Input
      &    FNINS, KCAN, NAVL, NDMNEW, NDMOLD,              !Input
@@ -46,8 +47,9 @@ C========================================================================
       IMPLICIT NONE
       SAVE
 
+      CHARACTER*1  PLME					   
       CHARACTER*6  ERRKEY
-      PARAMETER   (ERRKEY = 'VEGGR')
+      PARAMETER   (ERRKEY = 'TG_VEGGR')
 
       CHARACTER*6  ECONO, SECTION
       CHARACTER*80 C80
@@ -93,6 +95,8 @@ C========================================================================
 !     Run Initialization - Called once per simulation
 !***********************************************************************
       IF (DYNAMIC .EQ. RUNINIT) THEN
+      !Add the following if statement by JZW
+      IF (CONTROL % RUN == 1 .OR. INDEX('FPQ',CONTROL%RNMODE) < 0) THEN																											   
 !-----------------------------------------------------------------------
 !     Read in values from input file, which were previously input
 !       in Subroutine IPCROP.
@@ -155,12 +159,13 @@ C========================================================================
       CLOSE (LUNCRP)
 
 !-----------------------------------------------------------------------
-!    Call CANOPY for input
+!    Call TG_CANOPY for input
 !-----------------------------------------------------------------------
-      CALL CANOPY(RUNINIT,
+      CALL TG_CANOPY(RUNINIT, Control, PLME,
      &    ECONO, FILECC, FILEGC, KCAN, PAR, ROWSPC,       !Input
      &    RVSTGE, TGRO, TURFAC, VSTAGE, XLAI,             !Input
      &    CANHT, CANWH)                                   !Output
+      Endif  										   
 
 !***********************************************************************
 !***********************************************************************
@@ -168,33 +173,33 @@ C========================================================================
 !***********************************************************************
       ELSEIF (DYNAMIC .EQ. SEASINIT) THEN
 !-----------------------------------------------------------------------
-      CADLF  = 0.0  
-      CADST  = 0.0  
-      CMINEA = 0.0  
-      CRUSLF = 0.0  
-      CRUSRT = 0.0  
-      CRUSST = 0.0  
-      CUMTUR = 1.0  
-      EXCESS = 1.0  
-      FNINLG = 0.0  
-      FNINRG = 0.0  
-      FNINSG = 0.0  
-      NADLF  = 0.0  
-      NADRT  = 0.0  
-      NADST  = 0.0  
-      NGRLF  = 0.0  
-      NGRRT  = 0.0  
-      NGRST  = 0.0  
-      NSTRES = 1.0  
-      PGLEFT = 0.0
-      SUPPN  = 0.0
-      TNLEAK = 0.0  
-      VGRDEM = 0.0
-      WLDOTN = 0.0  
-      WRDOTN = 0.0  
-      WSDOTN = 0.0  
+      CADLF  = 0.0 !Mass of CH2O added to leaf reserves after growth  
+      CADST  = 0.0 !Mass of CH2O added to stems (g[CH2O] / m2 / d) 
+      CMINEA = 0.0 !Actual carbon mined from vegetative tissue (g[CH2O] / m2 / d)  
+      CRUSLF = 0.0 !C mobilized from leaf tissue in a day (g[CH2O] / m2 / d)  
+      CRUSRT = 0.0 !C mobilized from root tissue in a day (g[CH2O] / m2 / d)  
+      CRUSST = 0.0 !C mobilized from stem tissue in a day (g[CH2O] / m2 / d)  
+      CUMTUR = 1.0 !Cumulative turgor factor - 20 day water stress average  
+      EXCESS = 1.0 !Factor based on excess PG used to affect tomorrow's PG  
+      FNINLG = 0.0 !Minimum fraction of N for growing leaf tissue (g[N] / g[leaf])  
+      FNINRG = 0.0 !Minimum fraction of N for growing root tissue (g[N] / g[root])  
+      FNINSG = 0.0 !Minimum fraction of N for growing stem tissue (g[N] / g[stem])  
+      NADLF  = 0.0 !N added to leaf N reserves (g[N] / m2 / d)  
+      NADRT  = 0.0 !N added to root N reserves (g[N] / m2 / d)  
+      NADST  = 0.0 !N added to stem N reserves (g[N] / m2 / d)   
+      NGRLF  = 0.0 !Maximum N demand for leaf growth (g[leaf N] / m2[ground] / d) 
+      NGRRT  = 0.0 !Maximum N demand for root growth (g[root N] / m2[ground] / d) 
+      NGRST  = 0.0 !Maximum N demand for stem growth (g[stem N] / m2[ground] / d) 
+      NSTRES = 1.0 !Nitrogen stress factor (1=no stress, 0=max stress)  
+      PGLEFT = 0.0 !Excess PG after today's tissue growth (g[CH2O] / m2)
+      SUPPN  = 0.0 !Total supply of N (g[N] / m2 / d)
+      TNLEAK = 0.0 !Total nitrogen leak (g[N] / m2 / d)  
+      VGRDEM = 0.0 !Vegetative growth demand (g[vegetative tissue] / m2-d)
+      WLDOTN = 0.0 !Dry weight growth rate of new leaf tissue including N but not C   
+      WRDOTN = 0.0 !Dry weight growth rate of new root tissue including N but not C   
+      WSDOTN = 0.0 !Dry weight growth rate of new stem tissue including N but not C   
 
-      CALL CANOPY(SEASINIT,
+      CALL TG_CANOPY(SEASINIT,CONTROL,PLME,
      &    ECONO, FILECC, FILEGC, KCAN, PAR, ROWSPC,       !Input
      &    RVSTGE, TGRO, TURFAC, VSTAGE, XLAI,             !Input
      &    CANHT, CANWH)                                   !Output
@@ -204,18 +209,21 @@ C========================================================================
 !     EMERGENCE CALCULATIONS - Performed once per season upon emergence
 !         or transplanting of plants
 !***********************************************************************
-      ELSEIF (DYNAMIC .EQ. EMERG) THEN
+       ELSEIF (DYNAMIC .EQ. EMERG) THEN
 !-----------------------------------------------------------------------
-      FNINLG = PROLFG * 0.16   
-      FNINRG = PRORTG * 0.16   
-      FNINSG = PROSTG * 0.16   
-      CUMTUR = 1.0             
+      IF (CONTROL %RUN == 1 .OR. INDEX('FPQ',CONTROL%RNMODE) < 0) THEN
+        FNINLG = PROLFG * 0.16   !FNINLG: Minimum fraction of N for growing leaf tissue (g [N] / g [leaf])
+                               !PROLFG: Normal growth protein composition in leaves during growth  															 
+        FNINRG = PRORTG * 0.16   !PRORTG: Normal growth protein composition in roots during growth   
+        FNINSG = PROSTG * 0.16   
+        CUMTUR = 1.0             !CUMTUR: Cumulative turgor factor - 20 day water stress average 
+        !Canopy is only be called when run=1 or Runmode = F or q, thus we do not need to changecannopy codes
 
-      CALL CANOPY(EMERG,
+        CALL TG_CANOPY(EMERG, CONTROL, PLME,
      &    ECONO, FILECC, FILEGC, KCAN, PAR, ROWSPC,       !Input
      &    RVSTGE, TGRO, TURFAC, VSTAGE, XLAI,             !Input
      &    CANHT, CANWH)                                   !Output
-
+      ENDIF
 !***********************************************************************
 !***********************************************************************
 !     DAILY RATE/INTEGRATION
@@ -443,7 +451,7 @@ C     Subroutine CANOPY calculates height and width of the canopy as a
 C     function of VSTAGE, air temperature, drought stress (TURFAC),
 C     daylenght and radiation (PAR).
 C-----------------------------------------------------------------------
-      CALL CANOPY(INTEGR,
+      CALL TG_CANOPY(INTEGR, CONTROL,PLME,
      &    ECONO, FILECC, FILEGC, KCAN, PAR, ROWSPC,       !Input
      &    RVSTGE, TGRO, TURFAC, VSTAGE, XLAI,             !Input
      &    CANHT, CANWH)                                   !Output

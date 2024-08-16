@@ -1,5 +1,5 @@
 C=======================================================================
-C  CANOPY, Subroutine, G. Hoogenboom, K.J. Boote, J.W. Jones
+C  TG_CANOPY, Subroutine, G. Hoogenboom, K.J. Boote, J.W. Jones
 C  Calculates canopy height and canopy width as a function of V-Stage,
 C  air temperature, drought stress, daylength, and radiation.
 C-----------------------------------------------------------------------
@@ -13,25 +13,28 @@ C  01/22/2003 KJB Add checks for minimum canopy height and width.
 C  08/12/2003 CHP Revised I/O error checking
 C  06/30/2004 CHP/CDM Added KC_SLOPE to SPE file and KC_ECO to ECO file.
 C                 Added optional KCAN to ECO file.
+!  03/14/2012 JZW Add the input argument PLME for read I File when PLME = "T"																			  
 C-----------------------------------------------------------------------
 C  Called : VEGGR
 C  Calls  : ERROR, FIND, IGNORE
 C========================================================================
 
-      SUBROUTINE CANOPY(DYNAMIC, 
+      SUBROUTINE TG_CANOPY(DYNAMIC, CONTROL,PLME,
      &    ECONO, FILECC, FILEGC, KCAN, PAR, ROWSPC,       !Input
      &    RVSTGE, TGRO, TURFAC, VSTAGE, XLAI,             !Input
      &    CANHT, CANWH)                                   !Output
-
+       !If read IFile VStage will be output JZW debug
 C-----------------------------------------------------------------------
       USE ModuleDefs     !Definitions of constructed variable types, 
                          ! which contain control information, soil
                          ! parameters, hourly weather data.
+	  USE Interface_Read_IFile					  
       IMPLICIT NONE
       SAVE
 
+	  CHARACTER*1 PLME			  
       CHARACTER*6 ERRKEY
-      PARAMETER (ERRKEY = 'CANOPY')
+      PARAMETER (ERRKEY = 'TG_CANOPY')
 
       CHARACTER*6   SECTION
       CHARACTER*6   ECOTYP, ECONO
@@ -50,6 +53,7 @@ C-----------------------------------------------------------------------
       REAL XHWPAR(10), XHWTEM(10), YHWPAR(10), YHWTEM(10)
       REAL XVSHT(15), YVSHT(15), YVSWH(15)
       REAL TGRO(TS)
+	  TYPE (ControlType) CONTROL						
 
 !***********************************************************************
 !***********************************************************************
@@ -156,15 +160,17 @@ C-----------------------------------------------------------------------
 
       CANHT = 0.0
       CANWH = 0.0
-
+      ! In RUNINIT of TG_VEGGR.for, only call TG_Canopy when RUN=1 
 !***********************************************************************
 !***********************************************************************
 !     SEASONAL INITIALIZATION 
 !***********************************************************************
       ELSEIF (DYNAMIC .EQ. SEASINIT) THEN
 !-----------------------------------------------------------------------
-      CANHT = 0.0
-      CANWH = 0.0
+	  IF (CONTROL%RUN .EQ. 1 .OR. INDEX('QPF',CONTROL%RNMODE).LE.0) THEN																	
+        CANHT = 0.0
+        CANWH = 0.0
+	  Endif   
 
 !***********************************************************************
 !***********************************************************************
@@ -173,9 +179,15 @@ C-----------------------------------------------------------------------
 !***********************************************************************
       ELSEIF (DYNAMIC .EQ. EMERG) THEN
 !-----------------------------------------------------------------------
-        CANHT  = TABEX(YVSHT,XVSHT,VSTAGE,10)       
-        CANWH  = TABEX(YVSWH,XVSHT,VSTAGE,10)       
-
+	    IF (CONTROL %RUN == 1 .OR. INDEX('FPQ',CONTROL%RNMODE) < 0) THEN																	
+          CANHT  = TABEX(YVSHT,XVSHT,VSTAGE,10)       
+          CANWH  = TABEX(YVSWH,XVSHT,VSTAGE,10)       
+          If ( PLME .EQ. 'T')
+           ! The data of I File will over write the data of *.spe 
+     &    CALL Read_IFile (CONTROL, CHTI=CANHT, CWIDI=CANWH)
+          ! CHTI = Initial canopy height m
+          ! CWIDI= Initial canopy width m
+        endif			
 !***********************************************************************
 !***********************************************************************
 !     DAILY RATE/INTEGRATION
@@ -189,7 +201,7 @@ C-----------------------------------------------------------------------
         HWTEM = HWTEM + TABEX(YHWTEM,XHWTEM,TGRO(I),5)
       ENDDO
       HWTEM = HWTEM / 24.
-
+      ! Jin Debug: RUN=2, day 1, HWTEM = 0.763, Day2, HWTEM=0.608
 C-----------------------------------------------------------------------
 C     Calculate effect of day's PAR on canopy expansion, HPAR.
 C     ASSUME THAT UPPER 30% OF CANOPY SHADES THE GROWING POINT
@@ -202,11 +214,18 @@ C        PARNOD = PAR
 C     ENDIF
 C-----------------------------------------------------------------------
       PARNOD = PAR * EXP(-KCAN*(0.3*XLAI))
+      ! JZW debug, RUN=2, day 1, PAR = 20, KCAN = 0.6, XLAI=6.12, PARNOD = 6.65
+      ! HPAR = 1.67, WPAR =1, RCANHT=0, RVSTAGE=0, CANHT=2.4
+      ! Day 2. PAR = 5.5,KCAN = 0.6, XLAI=6.12, PARNOD =1.828
+      !  HPAR = 3.26, WPAR = 1.9, RVSTGE = 13.97, RCANHT = 3.8, CANHT =6.29																			   																   
       HPAR = TABEX(YHWPAR,XHWPAR,PARNOD,8)
       WPAR = TABEX(YHWPAR,XHWPAR,PAR,8)
 C-----------------------------------------------------------------------
 C     Calculate rate of increase in canopy height and update height, CANHT
 C-----------------------------------------------------------------------
+      !JZW, VStage should be continue from this year to next year, except when prone
+   !   if ((CONTROL %RUN .GE. 2) .and. (CONTROL % DAS .eq. 2)) 
+   !  &  RVSTGE = 0. ! JZW temp to fix bug in TG_VSTAGES, The canopy hight up or down with shap change on 2nd day of each year																																																		  
       RCANHT= RVSTGE * TABEX(YVSHT,XVSHT,VSTAGE,10) * HWTEM *
      &  TURFAC * HPAR * RHGHT
       CANHT = CANHT + RCANHT
@@ -236,9 +255,9 @@ C       width.
       ENDIF
 !***********************************************************************
       RETURN
-      END ! SUBROUTINE CANOPY
+      END ! SUBROUTINE TG_CANOPY
 !=======================================================================
-! CANOPY Definitions:  updated 25 Feb 2004
+! TG_CANOPY Definitions:  updated 25 Feb 2004
 !-----------------------------------------------------------------
 ! C255      255-character record read from file 
 ! CANHT     Canopy height (m)

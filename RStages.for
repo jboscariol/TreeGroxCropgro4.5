@@ -1,5 +1,5 @@
 C=======================================================================
-!  RSTAGES Subroutine Modified from
+!  TG_RSTAGES Subroutine Modified from
 C      STAGES, Subroutine, J. W. Jones
 C  Calculates phenological stages and individual phase durations.
 C-----------------------------------------------------------------------
@@ -13,13 +13,13 @@ C-----------------------------------------------------------------------
 !     Calls:       None
 C=======================================================================
 
-      SUBROUTINE RSTAGES(CONTROL,
-     &    FNSTR, FPSTR, FSW, FT, FUDAY, ISIMI, NPRIOR,    !Input
-     &    PHTHRS, PLME, SDEPTH, YRDOY, YRPLT, YRSIM,      !Input
-     &    JPEND, MDATE, NDLEAF, NDSET, NDVST, NVALPH,     !Output
-     &    NVEG0, NVEG1, NR1, NR2, NR5, NR7, PHZACC,       !Output
-     &    RSTAGE, STGDOY, SeedFrac, VegFrac, YREMRG,      !Output
-     &    YRNR1, YRNR2, YRNR3, YRNR5, YRNR7)              !Output
+      SUBROUTINE TG_RSTAGES(CONTROL,
+     &    FNSTR, FPSTR, FSW, FT, FUDAY, ISIMI, NPRIOR,           !Input
+     &    PHTHRS, PLME, SDEPTH, YRDOY, YRPLT, YRSIM,             !Input
+     &    JPEND, MDATE, FrDrpDay, NDLEAF, NDSET, NDVST, NVALPH,  !Output
+     &    NVEG0, NVEG1, NR1, NR2, NR5, NR7, PHZACC,              !Output
+     &    RSTAGE, STGDOY, SeedFrac, VegFrac, YREMRG,             !Output
+     &    YRNR1, YRNR2, YRNR3, YRNR5, YRNR7)                     !Output
 
 !-----------------------------------------------------------------------
       USE ModuleDefs     !Definitions of constructed variable types, 
@@ -35,7 +35,7 @@ C=======================================================================
       INTEGER NDLEAF,  NDSET, NDVST, JPEND  !, TIMDIF
       INTEGER RSTAGE,  NVEG0, NVEG1, NR0, NR1, NR2, NR3, NR5, NR7
       INTEGER YRNR1, YRNR2, YRNR3, YRNR5, YRNR7, MDATE, YREMRG
-      INTEGER NPRIOR(20), STGDOY(20), NVALPH(20)
+      INTEGER NPRIOR(20), STGDOY(20), NVALPH(20), FrDrpDay
 
       REAL PHTEM, SDEPTH
       REAL FT(20), FUDAY(20), FSW(20), FNSTR(20), FPSTR(20), PHTHRS(20)
@@ -101,6 +101,7 @@ C=======================================================================
       YRNR5  = -99
       YRNR7  = -99
       MDATE  = -99
+      FrDrpDay = -99					
       YREMRG = -99
 
       PHTEM = 0.0
@@ -160,8 +161,10 @@ C***********************************************************************
 C-----------------------------------------------------------------------
 C     Transplants
 C-----------------------------------------------------------------------
+      !YR_DOY(YRDOY, YEAR, DOY)							   
       IF (PLME .EQ. 'T' .AND. YRPLT .EQ. YRDOY) THEN
-        NVEG0 = DAS
+      IF (CONTROL%RUN .EQ. 1 .OR. INDEX('P',CONTROL%RNMODE).LE. 0) THEN ! JZW add this for debug																								
+        NVEG0 = DAS !Day of emergence (d)
         NVALPH(2) = NVEG0
         YREMRG    = YRDOY
 !        IF (PHZACC(2) .GE. PHTHRS(2)) THEN
@@ -192,6 +195,7 @@ C-----------------------------------------------------------------------
           ENDIF
         ENDIF
       ENDIF
+      Endif		   
 
 C-----------------------------------------------------------------------
 C     Check for emergence, if NVEG0 has been set to less than its 
@@ -521,10 +525,10 @@ C-------------------------------------------------------------------------------
       END IF
 !************************************************************************
       RETURN
-      END SUBROUTINE RSTAGES
+      END SUBROUTINE TG_RSTAGES
 
 !------------------------------------------------------------------------
-!     RSTAGES Variables:
+!     TG_RSTAGES Variables:
 !------------------------------------------------------------------------
 ! DAS       Days after start of simulation (days)
 ! FNSTR(I)  Nitrogen stress function (0 to 1) for phase I 
@@ -584,5 +588,5 @@ C-------------------------------------------------------------------------------
 ! YRPLT     Planting date (YYDDD)
 ! YRSIM     Start of simulation date (YYDDD)
 !-----------------------------------------------------------------------
-!     End Subroutine RSTAGES
+!     End Subroutine TG_RSTAGES
 !-----------------------------------------------------------------------

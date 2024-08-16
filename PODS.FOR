@@ -1,5 +1,5 @@
 !=======================================================================
-!  PODS, Subroutine, K. J. Boote, J. W. Jones, G. Hoogenboom
+!  TG_PODS, Subroutine, K. J. Boote, J. W. Jones, G. Hoogenboom
 !-----------------------------------------------------------------------
 !  Computes seed and shell growth; initiation of flowers, shells, seed.
 !-----------------------------------------------------------------------
@@ -27,7 +27,7 @@
 !                ERROR, FIND, IGNORE
 !=======================================================================
 
-      SUBROUTINE PODS(DYNAMIC,  
+      SUBROUTINE TG_PODS(DYNAMIC,  
      &    AGRSD1, AGRSH1, DLAYR, DRPP, DUL, FILECC,       !Input
      &    FILEGC,FILEIO, FNINL, FNINSD, FNINSH, GDMSD,    !Input
      &    GRRAT1, ISWWAT, LL, NAVL, NDSET, NLAYR, NRUSSH, !Input
@@ -329,27 +329,30 @@
 !***********************************************************************
       ELSEIF (DYNAMIC .EQ. EMERG) THEN
 !-----------------------------------------------------------------------
-        ACCAGE  = 0.0
-        AFLW    = 0.0
-        CNSTRES = 1.0
-        CPSTRES = 1.0     !CHP 3/24/2004
+        !If only one harvest per year, we do not need to change the following codes for tree																							
+        ACCAGE  = 0.0 !Fraction of physiological time from pod set to physiological 
+        AFLW    = 0.0 !Relative rate of flower abortion per day 
+        CNSTRES = 1.0 !Nitrogen stress factor - 8 day moving average
+        CPSTRES = 1.0     !CHP 3/24/2004 ! P stress factor - 8 day moving average
         FNINSH  = PROSHI * 0.16         
-        FLWRDY  = 0.0
-        PCTMAT  = 0.0
-        PODADD  = 0.0
-        SHMINE  = 0.0
-        TEMPOD  = 0.0
-        TRIGGR  = 0
-        WTSHM   = 0.0
+        ! PROSHI    Maximum protein composition in shells during growth with 
+        !             luxurious supply of N (g[protein] / g[shell tissue])																			 																			
+        FLWRDY  = 0.0 !Flowers that survive NR2 photothermal days which can limit pod 
+        PCTMAT  = 0.0 !Fraction of pods that are mature (seed are 90% of final size) 
+        PODADD  = 0.0 !Number of pods added today (pods / m2 / d)
+        SHMINE  = 0.0 !Protein mass mined from shell tissue for seed growth
+        TEMPOD  = 0.0 !Factor for modifying pod setting based on temperature
+        TRIGGR  = 0   !Switch to determine if full pod load has been set for at least 
+        WTSHM   = 0.0 !Cohorts that reach THRESH today (g/m2)
 
         DO NPP = 1, NCOHORTS
-          SHELN(NPP) = 0.0
-          WTSHE(NPP) = 0.0
-          WTSD(NPP) = 0.0
-          SDNO(NPP) = 0.0
-          FLWN(NPP) = 0.0
-          SUPDE(NPP) = 0.0
-          AVTEM(NPP) = 0.0
+          SHELN(NPP) = 0.0 ! Number of shells for cohort J (#/m2)
+          WTSHE(NPP) = 0.0 !Shell mass  for cohort J (g/m2)
+          WTSD(NPP) = 0.0  !Seed mass  for cohort J (g/m2)
+          SDNO(NPP) = 0.0  !Number of seeds for cohort J (#/m2)
+          FLWN(NPP) = 0.0  !Number of flowers added for cohort J (# / m2)
+          SUPDE(NPP) = 0.0 !Cumulative average supply-demand ratio for shells formed on day 
+          AVTEM(NPP) = 0.0 !Running average value of TEMPOD (factor for modifying pod
         ENDDO
       
         CALL PODCOMP(
@@ -802,373 +805,7 @@
       ENDIF
 !***********************************************************************
       RETURN
-      END SUBROUTINE PODS
-!=======================================================================
-
-!=======================================================================
-!  PODCOMP, Subroutine, K. J. Boote, E. Piper
-!-----------------------------------------------------------------------
-!  Computes modification of seed composition
-!-----------------------------------------------------------------------
-!  Ratio of supply to demand for seed growth (RSD). Carbohydrates
-!  still a limiting factor, N is limiting to seed growth only if
-!  protein falls below minimum N (PROMIN), mobilized protein can be
-!  used for seed growth if C supply is less than demand, CRSD<1.0,
-!  upto a maximum seed protein.
-!
-!  The AGRSD1 is set by INCOMP, and stays constant and is used with
-!  "questions", DEMAND, and setting pod no, etc.  AGRSD3 is used
-!  when  composition changes below, and used to compute PGLEFT and
-!  one time later in PLANT for the day's reprod. growth.
-!-----------------------------------------------------------------------
-!  REVISION HISTORY
-!  01/22/1998 GH  Restructured PODS routine
-!  01/22/1998 GH  Reorganize and restructure code
-!  07/13/1998 GH  Modified for modular structure
-!  05/11/1999 GH  Incorporated in CROPGRO routine
-!  08/12/2003 CHP Added I/O error checking
-!-----------------------------------------------------------------------
-!  Called from:  PODS
-!  Calls:        ERROR, FIND, IGNORE
-!=======================================================================
-
-      SUBROUTINE PODCOMP(
-     &  AGRSD1, FILECC, FNINSD, GDMSD, NAVL, PGAVLR,    !Input
-     &  POTCAR, POTLIP,                                 !Input/Output
-     &  AGRSD3, ANINSD, CUMSIG, RSD,                    !Output
-     &  DYNAMIC)                                        !Control
-
-!-----------------------------------------------------------------------
-      USE ModuleDefs     !Definitions of constructed variable types, 
-                         ! which contain control information, soil
-                         ! parameters, hourly weather data.
-      IMPLICIT NONE
-      SAVE
-
-      CHARACTER*6 ERRKEY
-      PARAMETER (ERRKEY = 'PODCOM')
-
-      CHARACTER*6 SECTION
-      CHARACTER*80 C80
-      CHARACTER*92 FILECC
-
-      INTEGER LUNCRP, ERR, LINC, LNUM, FOUND, ISECT, I
-      INTEGER DYNAMIC
-
-      REAL AGRSD1, AGRSD3, ANINSD, CRSD, CRSD2, CUMSIG, DMSDC 
-      REAL DMSDN, DTCAR, DTLIP, FNINSD, GDMSD, NAVL, NREQ, NRSD 
-      REAL PGAVLR, PLIGSD, PMINSD, PNINSD, POASD, POTCAR, POTLIP
-      REAL PROMAX, PROMIN, RATIOC, RATION, RCH2O, RLIG, RLIP
-      REAL RMIN, ROA, RSD, THETA, TOTAL, XRSD
-
-!***********************************************************************
-!***********************************************************************
-!     Run Initialization - Called once per simulation
-!***********************************************************************
-      IF (DYNAMIC .EQ. RUNINIT) THEN
-!***********************************************************************
-!     Read in values from input file, which were previously input
-!       in Subroutine IPCROP.
-!-----------------------------------------------------------------------
-      CALL GETLUN('FILEC', LUNCRP)
-      OPEN (LUNCRP,FILE = FILECC, STATUS = 'OLD',IOSTAT=ERR)
-      IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,0)
-      LNUM = 0
-!-----------------------------------------------------------------------
-!    Find and Read Respiration Section
-!-----------------------------------------------------------------------
-!     Subroutine FIND finds appropriate SECTION in a file by
-!     searching for the specified 6-character string at beginning
-!     of each line.
-!-----------------------------------------------------------------------
-      SECTION = '!*RESP'
-      CALL FIND(LUNCRP, SECTION, LINC, FOUND) ; LNUM = LNUM + LINC
-      IF (FOUND .EQ. 0) THEN
-        CALL ERROR(SECTION, 42, FILECC, LNUM)
-      ELSE
-        DO I = 1, 3
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          IF (ISECT .EQ. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-        ENDDO
-        READ(C80,'(5F6.0)',IOSTAT=ERR) RCH2O, RLIP, RLIG, ROA, RMIN
-        IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-      ENDIF
-
-!-----------------------------------------------------------------------
-!    Find and Read Plant Composition Section
-!-----------------------------------------------------------------------
-      SECTION = '!*PLAN'
-      CALL FIND(LUNCRP, SECTION, LINC, FOUND) ; LNUM = LNUM + LINC
-      IF (FOUND .EQ. 0) THEN
-        CALL ERROR(SECTION, 42, FILECC, LNUM)
-      ELSE
-        DO I = 1, 3
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          IF (ISECT .EQ. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-        ENDDO
-        READ(C80,'(18X,3F6.0)',IOSTAT=ERR) PROMIN, PROMAX, THETA
-        IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-
-        DO I = 1, 3
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          IF (ISECT .EQ. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-        ENDDO
-        READ(C80,'(24X,F6.0)',IOSTAT=ERR) PLIGSD
-        IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-
-        CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-        READ(C80,'(24X,F6.0)',IOSTAT=ERR) POASD
-        IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-
-        CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-        READ(C80,'(24X,F6.0)',IOSTAT=ERR) PMINSD
-        IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-      ENDIF
-
-      CLOSE (LUNCRP)
-
-!***********************************************************************
-!***********************************************************************
-!     EMERGENCE CALCULATIONS - Performed once per season upon emergence
-!         or transplanting of plants
-!***********************************************************************
-      ELSEIF (DYNAMIC .EQ. EMERG) THEN
-!-----------------------------------------------------------------------
-!     Initialize plant variables at emergence
-!-----------------------------------------------------------------------
-        CUMSIG = 1.0      
-        RATION = 1.0      
-        RATIOC = 1.0      
-
-!***********************************************************************
-!***********************************************************************
-!     DAILY INTEGRATION
-!***********************************************************************
-      ELSEIF (DYNAMIC .EQ. INTEGR) THEN
-!-----------------------------------------------------------------------
-!     Daily initialize, each should change before seed cohorts section
-!-----------------------------------------------------------------------
-      PNINSD = FNINSD
-      ANINSD = FNINSD
-      DTLIP = 0.0
-      DTCAR = 0.0
-      AGRSD3 = AGRSD1
-      RSD = 1.0
-      CRSD = 1.0
-      NRSD = 1.0
-      XRSD = 1.0
-
-      IF (PGAVLR .LE. 0.00001) THEN
-        RSD = 0.0
-      ELSEIF (GDMSD .LE. 0.0001) THEN
-        RSD = 1.0
-      ELSE
-        CRSD2 = PGAVLR/(GDMSD*AGRSD1)
-        CRSD  = MIN(CRSD2,1.0)
-        NREQ = FNINSD*(MIN(PGAVLR/AGRSD1,GDMSD))
-        NRSD = NAVL/NREQ
-!-----------------------------------------------------------------------
-!     Full seed load defined for either of all N or all C
-!     being used for seed growth.
-!-----------------------------------------------------------------------
-        CUMSIG = 0.8 * CUMSIG + 0.2 * CRSD
-!-----------------------------------------------------------------------
-!     5-day moving average.  Does it work ?
-!
-!     Computing the possible seed N conc given the "total" NAVL
-!     relative to PG available or seed growth demand
-!-----------------------------------------------------------------------
-        PNINSD = NAVL/(MIN(PGAVLR/AGRSD1,GDMSD))
-!-----------------------------------------------------------------------
-!     Set ANINSD equal to FNINSD to allow nitrogen to go to vegetative
-!     parts when carbon is not limiting.  Note:  CRSD and NRSD are above
-!     1 and upto 30 during the time seed setting occurs.  This is why we
-!     can not let ANINSD = PNINSD or let RSD = CRSD during this phase.
-
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-!     CASE 4: NRSD <= 1.0 - N supply limiting seed growth
-!-----------------------------------------------------------------------
-        IF (NRSD .LE. 1.0) THEN
-!-----------------------------------------------------------------------
-!   NOTE THAT WHEN NRSD .LT. 1.0, THEN PNINSD .LT. FNINSD.  IN THIS CASE,
-!   THE N SUPPLY IS INSUFFICIENT TO GROW SEED AT FNINSD.  N IS LIMITED
-!   RELATIVE TO C SUPPLY AND RELATIVE TO SEED DEMAND.  ALLOW SEED N CONC
-!   TO DECLINE AND RECOMPUTE RSD & AGRSD3.  THERE IS NO CASE OF EXCESS C
-!   SUPPLY HERE BECAUSE N STRESS BY THE DEFINED CURVE LIMITS SINGLE SEED
-!   GROWTH RATE.  N STRESS INCREASINGLY LIMITS SEED GROWTH RATE AS PNINSD
-!   DECLINES.  AS A RESULT OF "LIMITING" SEED GROWTH RATE, THE SEED N CONC
-!   IS  HELD UP A BIT MORE BECAUSE LESS C IS USED.  SO ANINSD WILL BE
-!   A BIT HIGHER THAN PNINSD HERE.  AGRSD3 AND RSD SHOULD BE RECOMPUTED.
-!
-!   MORE NOTES:  NOTE THAT NRSD AND PNINSD ALREADY CONSIDER CARBON SUPPLY
-!   (PGAVLR) IN THEIR EQUATIONS.  THUS, IF C SUPPLY IS HIGH, THEN PNINSD
-!   WILL BE LOW AND IT WILL BE CONSIDERED HERE.  IF C SUPPLY IS LOW, THE
-!   PNINSD WILL BE HIGH (ABOVE FNINSD) AND NRSD > 1, AND IT WILL BE
-!   CONSIDERED IN THE NEXT LOOP.
-!
-!        COMPUTE XRSD WITH RECT HYP EQ, WITH INIT SLOPE = 1/PROMIN
-!        MAX = 1.0 AT FNINSD, AND THE Y IS 0 TO 1.0 AND X IS
-!        INCOMING PNINSD FROM ZERO TO FNINSD.
-!        THIS "RSD" DESCRIBES N LIMIT ON SEED GROWTH RATE
-!        THEN COMPUTE "NEW" "ANINSD" BASED ON "N-LIMITED' SEED
-!        GROWTH RATE.  USE THAT AS THE ANINSD, THEN CHECKS FOR
-!        CARBOHYDRATE REQUIRED BASED ON NAVL AND PGAVLR
-!
-!-----------------------------------------------------------------------
-!          SCALAR = (FNINSD/PROMIN + 1.0 - ((FNINSD/PROMIN + 1.0)**2
-!     &          - 4*THETA*FNINSD/PROMIN*1.0)**0.5)/(2*THETA)
-!          XRSD = ((PNINSD/PROMIN + 1.0 - ((PNINSD/PROMIN + 1.0)**2
-!     &          - 4*THETA*PNINSD/PROMIN*1.0)**0.5)/(2*THETA))/SCALAR
-
-          XRSD = ((PNINSD/PROMIN + 1.0 - ((PNINSD/PROMIN + 1.0)**2
-     &          - 4*THETA*PNINSD/PROMIN*1.0)**0.5)/(2*THETA)) /
-     &           ((FNINSD/PROMIN + 1.0 - ((FNINSD/PROMIN + 1.0)**2
-     &          - 4*THETA*FNINSD/PROMIN*1.0)**0.5)/(2*THETA))
-
-          IF (XRSD*MIN(PGAVLR/AGRSD1,GDMSD) > 1.E-5) THEN
-            ANINSD = NAVL/(XRSD*MIN(PGAVLR/AGRSD1,GDMSD))
-          ELSE
-            ANINSD = FNINSD
-          ENDIF
-!-----------------------------------------------------------------------
-!  CHECK BECAUSE N CONC CAN GO ABOVE FNINSD IF PNINSD NEAR FNINSD
-!-----------------------------------------------------------------------
-          ANINSD = MIN(ANINSD,FNINSD)
-
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-!     CASE 3: CRSD2 <= 1.0 - C supply is limiting seed growth.
-!-----------------------------------------------------------------------
-        ELSE
-!      HERE NRSD .GT. 1.0 AND PNINSD .GT. FININSD, SO ALLOW INCREASING
-!      SEED N CONC.  CONSIDER TWO OPTIONS, C DEFICIENT OR THAT C
-!      SUPPLY IS EXCESS.  A CRSD <= 1.0 IS THE SAME AS CRSD2 <= 1.0
-!      FIRST OPTION IS IF C SUPPLY IS DEFICIENT, BUT N SUPPLY/DEMAND
-!      RATIO GREATER THAN 1.
-          IF (CRSD2 .LE. 1.0) THEN
-!-----------------------------------------------------------------------
-!      DOES POSSIBLE N CONCENTRATION EXCEED MAX?
-!-----------------------------------------------------------------------
-!           IF (PNINSD.GT.PROMAX) THEN
-!             ANINSD = PROMAX
-!           ELSE
-!-----------------------------------------------------------------------
-!     UNDER THIS CONDITION, CRSD < 1.0 AND NRSD > 1.0 AND PNINSD <PROMAX
-!     SO HERE WE LET SEED N CONC INCREASE, AND BE EQUAL TO PNINSD.
-!-----------------------------------------------------------------------
-!               ANINSD = PNINSD
-!            ENDIF
-            ANINSD = MIN(PNINSD, PROMAX)
-
-!-----------------------------------------------------------------------
-!      IT IS NOT POSSIBLE FOR PNINSD < FNINSD AND YET NRSD > 1.0
-!      IT IS NOT POSSIBLE FOR PNINSD > FNINSD AND YET NRSD < 1.0 EITHER
-!      SO NRSD CAN ONLY BE < 1.0 IF NAVL < NREQ, AND THAT IS ONLY
-!      IF PNINSD < FNINSD.  THIS WAS COVERED BEFORE
-
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-!     CASE 2: Full seed load and neither N or C supply is limiting 
-!         seed growth
-!-----------------------------------------------------------------------
-          ELSE IF (CRSD2 .GT. 1.0 .AND. CUMSIG .LT. 0.98) THEN
-!-----------------------------------------------------------------------
-!      UNDER THIS CONDITION, N IS EXCESS RELATIVE TO C SUPPLY OR SD
-!      DEMAND (NRSD > 1) AND C SUPPLY EXCEEDS SEED DEMAND (CRSD2 > 1).
-!      ALSO, RESTRICTED THIS ONE TO OCCUR ONLY AFTER A FULL SEED LOAD
-!      OCCURS.  THE "CUMSIG" MUST BE WORKED TO DROPPED BELOW 1.0 ONLY
-!      WHEN SEVERAL DAYS OF "FULL SEED" LOAD OCCURS.  RESULTS FROM
-!      SEVERAL DAYS OF CRSD OR CRSD2 < 1,  WE NEED THIS TO AVOID
-!      PROBLEMS DURING EARLY PODSET WHEN CRSD IS VERY LARGE AND NRSD
-!      ALSO LARGE.
-!-----------------------------------------------------------------------
-!      0.20 FRACTION OF EXCESS ASSIMILATE IS ALLOWED TO "PUSH" SINGLE
-!      SEED GROWTH RATE (I.E., VIA INCREASED RSD).  THIS WILL DECREASE
-!      AMOUNT OF STEM AND LEAF GROWTH DURING SEED FILL.
-!      LIMIT THE ACTUAL N CONC TO PROMAX OR THE NAVL/(GDMSD*RSD).  THIS
-!      ONE WILL NEED TO BE CHECKED CAREFULLY TO PREVENT REALLY HIGH OR
-!      LOW N.  WE INTEND FOR IT TO ALLOW N CONC LOWER THAN FNINSD, BUT
-!      WILL DO AN XRSD LIMIT ON SEED GROWTH RATE IF ANINSD .LT. FNINSD
-!
-!      BECAUSE WE USE ONLY 20% OF EXCESS ASSIMILATE, I DON'T THINK WE
-!      NEED TO RE-COMPUTE RSD AFTER COMPUTING COMPOSITIONS AND COSTS.
-!
-!      GIVE UP ON "BOOSTING" SEED GROWTH RATE, TRY TO INFLUENCE
-!      COMPOSITION AS A RATIO OF N SUPPLY TO C SUPPLY, NORMALIZED
-!      TO FNINSD.  RECIPROCAL OF RATION IS RATIOC.  ASSUME SLOPE OF
-!      ONE-THIRD OF POSSIBLE CHANGE FROM FNINSD TO PROMAX OR PROMIN.
-!       9/25/95 KJB
-!-----------------------------------------------------------------------
-            ANINSD = FNINSD
-            IF (NAVL .GT. 0.0) THEN
-              RATION = (NAVL/(PGAVLR/AGRSD1))/FNINSD
-              RATIOC = 1.0 / RATION
-              IF (RATION .GE. 1.0) THEN
-                ANINSD = MIN(FNINSD * (1.0 + (RATION - 1.0)/3.), PROMAX)
-              ELSE
-                ANINSD = MAX(FNINSD * (1.0-(RATIOC-1.0)/3.), PROMIN)
-              ENDIF
-            ENDIF
-
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-!     CASE 1: Do not have full seed load and carbon supply is not 
-!         limiiting sedd growth.  Do not change composition.
-!-----------------------------------------------------------------------
-
-          ELSEIF (CRSD2 .GT. 1.0 .AND. CUMSIG .GE. 0.98) THEN
-!-----------------------------------------------------------------------
-!  EVEN IF CRSD2 > 1 AND NRSD > 1, WE HAVE NOT REACHED A SEED LOAD
-!  SO HOLD CONCENTRATIONS AND COSTS UNCHANGED.
-!-----------------------------------------------------------------------
-            ANINSD = FNINSD
-          ENDIF
-        ENDIF
-
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-!  For cases 2, 3 and 4, adjust lipids and carbohydrate concentrations
-!-----------------------------------------------------------------------
-        IF (NRSD .LE. 1.0 .OR. CRSD2 .LE. 1.0 .OR. 
-     &        CUMSIG .LT. 0.98) THEN
-!-----------------------------------------------------------------------
-!     ADJUSTING SO LIPID AND CARBOHYDRATE TAKE UP DIFFERENCE
-!     MOST DATA SUGGEST THAT LIPID CHANGES 0.33 PER 1 PERCENT CHANGE
-!     IN PROTEIN.
-!-----------------------------------------------------------------------
-          DTLIP = 0.33*(FNINSD - ANINSD)*6.25
-          DTCAR = (FNINSD - ANINSD)*6.25  - DTLIP
-          POTLIP = POTLIP + DTLIP
-          POTCAR = POTCAR + DTCAR
-!     POTPRO = ANINSD*6.25
-          TOTAL  = POTLIP + ANINSD*6.25 + POTCAR + PMINSD + 
-     &                POASD + PLIGSD
-!             TOTAL not used - chp
-          AGRSD3 = PMINSD*RMIN + PLIGSD*RLIG + POASD*ROA +
-     &           POTLIP*RLIP + POTCAR*RCH2O
-!-----------------------------------------------------------------------
-!     THIS IS CORRECT, ABOVE BASED ON N LIMIT, NEXT ON C LIMIT
-!     CONSIDERING ANY SHIFT IN PROTEIN CONC.
-!-----------------------------------------------------------------------
-          DMSDN = NAVL / ANINSD
-          DMSDC = PGAVLR / AGRSD3
-          RSD = MIN(MIN(DMSDN,DMSDC)/GDMSD,1.0)
-          RSD = MAX(0.0,RSD)
-        ENDIF
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-
-      ENDIF
-
-!***********************************************************************
-!***********************************************************************
-!     END OF DYNAMIC IF CONSTRUCT
-!***********************************************************************
-      ENDIF
-!***********************************************************************
-      RETURN
-      END !SUBROUTINE PODCOMP
+      END SUBROUTINE TG_PODS
 !=======================================================================
 
 !***********************************************************************

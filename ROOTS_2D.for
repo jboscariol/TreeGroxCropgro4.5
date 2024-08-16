@@ -1,5 +1,5 @@
 !=======================================================================
-!  ROOTY_2D, Subroutine, G. Hoogenboom, J.W. Jones
+!  TG_ROOTY_2D, Subroutine, G. Hoogenboom, J.W. Jones
 !     C.H.Porter modified for simple 2D algorithm
 !-----------------------------------------------------------------------
 !
@@ -36,19 +36,20 @@
 !  Calls      :  IPROOT, INROOT
 !=======================================================================
 
-      SUBROUTINE ROOTY_2D(DYNAMIC,
+      SUBROUTINE TG_ROOTY_2D(DYNAMIC, Control,
      &    AGRRT, CELLS, CROP, DTX, FILECC, FRRT,          !Input
      &    ISWWAT, PLTPOP, ROWSPC, RTWT, SOILPROP,         !Input
      &    SWFAC, VSTAGE, WRDOTN, WTNEW,                   !Input
      &    RLV, RTDEP, RTWID, SATFAC, SENRT, SRDOT,        !Output
      &    TotRootMass, CumRootMass, RFAC3)                !Output
 !-----------------------------------------------------------------------
+      USE Interface_Read_IFile							  
       USE Cells_2D
       USE ModuleData
       IMPLICIT NONE
       SAVE
 
-      CHARACTER*1 ISWWAT
+      CHARACTER*1 ISWWAT, PLME
       CHARACTER*2 CROP
       CHARACTER*92 FILECC
 
@@ -91,6 +92,7 @@
       REAL, DIMENSION(NL) :: DLAYR, WR, RLV, SENRT
 
       TYPE (SoilType) SOILPROP
+      TYPE (ControlType) CONTROL								
 
       NLAYR = SOILPROP % NLAYR
       DLAYR = SOILPROP % DLAYR
@@ -102,88 +104,95 @@
 !***********************************************************************
       IF (DYNAMIC .EQ. RUNINIT) THEN
 !-----------------------------------------------------------------------
-      CALL IPROOT_2D(FILECC,                              !Input
-     &  PORMIN, RFAC1, RLDSM, RTDEPI, RTEXF, RTSEN, RTSDF,!Output
-     &  RTWIDI, RTWTMIN, XRTFAC, YRTFAC, XRTFACH, YRTFACH)!Output
+      !Add the following if statement by JZW
+      IF (CONTROL %RUN == 1 .OR. INDEX('FPQ',CONTROL%RNMODE) < 0) THEN													  
+        CALL TG_IPROOT_2D(FILECC,                              !Input
+     &    PORMIN, RFAC1, RLDSM, RTDEPI, RTEXF, RTSEN, RTSDF,!Output
+     &    RTWIDI, RTWTMIN, XRTFAC, YRTFAC, XRTFACH, YRTFACH)!Output
 
-      SRDOT    = 0.0
-      RLV      = 0.0
-      RLV_2D   = 0.0
-      RTWIDr   = 0.0
-      SENRT_2D = 0.0
-      SUMEX    = 0.0
-      SUMRL    = 0.0
-      SATFAC   = 0.0
-      RTDEP    = 0.0
-      RTWID    = 0.0
-      TRLV     = 0.0
+        SRDOT    = 0.0
+        RLV      = 0.0
+        RLV_2D   = 0.0
+        RTWIDr   = 0.0
+        SENRT_2D = 0.0
+        SUMEX    = 0.0
+        SUMRL    = 0.0
+        SATFAC   = 0.0
+        RTDEP    = 0.0
+        RTWID    = 0.0
+        TRLV     = 0.0
       
-      RFAC3 = RFAC1
-      RLNEW = 0.0
-      
+        RFAC3 = RFAC1
+        RLNEW = 0.0
+      Endif      
 !***********************************************************************
 !***********************************************************************
 !     Seasonal initialization - run once per season
 !***********************************************************************
       ELSEIF (DYNAMIC .EQ. SEASINIT) THEN
 !-----------------------------------------------------------------------
-      STRUC = CELLS%STRUC
-      Thick = STRUC%THICK
-      Width = STRUC%WIDTH
-      CellArea = STRUC%CellArea
-      TypeCell = STRUC%CellType
-      DUL = CELLS%STATE%DUL
-      LL  = CELLS%STATE%LL
-      SAT = CELLS%STATE%SAT
+      IF (CONTROL%RUN .EQ.1 .OR. INDEX('QPF',CONTROL%RNMODE).LE. 0) THEN																		
+        STRUC = CELLS%STRUC
+        Thick = STRUC%THICK
+        Width = STRUC%WIDTH
+        CellArea = STRUC%CellArea
+        TypeCell = STRUC%CellType
+        DUL = CELLS%STATE%DUL
+        LL  = CELLS%STATE%LL
+        SAT = CELLS%STATE%SAT
 
-!     Calculate maximum depth in each column and width in each row
-      FirstRow = 0
-      WidMax = 0.0
-      DepMax = 0.0
-      DO Row = 1, NRowsTot
-        SELECT CASE(TypeCell(Row,1))
-        CASE(0,1,2)  !Ignore surface water or litter cells and furrow
-!         Go on to next row
-          CYCLE
-        CASE(3,4,5)
-!         Maximum depth is the same for all columns, calc for column 1
-          DepMax = DepMax + Thick(Row,1)
-          IF (FirstRow == 0) FirstRow = Row
-        CASE (:-1,6:)  !less than zero, or greater than 5
-          EXIT
-        END SELECT
-
-        DO Col = 1, NColsTot
-          SELECT CASE(TypeCell(Row,Col))
-          CASE (3,4,5)
-!           Maximum width can vary with depth for bedded systems
-            WidMax(Row) = WidMax(Row) + Width(Row,Col)
+!       Calculate maximum depth in each column and width in each row
+        FirstRow = 0
+        WidMax = 0.0
+        DepMax = 0.0
+        DO Row = 1, NRowsTot
+          SELECT CASE(TypeCell(Row,1))
+            CASE(0,1,2)  !Ignore surface water or litter cells and furrow
+!             Go on to next row
+              CYCLE
+            CASE(3,4,5)
+!             Maximum depth is the same for all columns, calc for column 1
+              DepMax = DepMax + Thick(Row,1)
+              IF (FirstRow == 0) FirstRow = Row
+            CASE (:-1,6:)  !less than zero, or greater than 5
+              EXIT
           END SELECT
+
+          DO Col = 1, NColsTot
+            SELECT CASE(TypeCell(Row,Col))
+              CASE (3,4,5)
+!             Maximum width can vary with depth for bedded systems
+              WidMax(Row) = WidMax(Row) + Width(Row,Col)
+            END SELECT
+          ENDDO
         ENDDO
-      ENDDO
       
 !-----------------------------------------------------------------------
-!     ROOT DEPTH INCREASE RATE WITH TIME, cm/physiological day
+!       ROOT DEPTH INCREASE RATE WITH TIME, cm/physiological day
 !-----------------------------------------------------------------------
-      IF (CROP .NE. 'FA') THEN
-        RFAC2 = TABEX(YRTFAC,XRTFAC,0.0,4)
-        RFAC2H = TABEX(YRTFACH, XRTFACH, 0.0, 4)
-      ENDIF
+        IF (CROP .NE. 'FA') THEN !RFAC2 Root depth increase rate with time (cm / physiol. day)
+          RFAC2 = TABEX(YRTFAC,XRTFAC,0.0,4)
+          RFAC2H = TABEX(YRTFACH, XRTFACH, 0.0, 4)
+        ENDIF
       
-      SRDOT    = 0.0
-      RLV      = 0.0
-      RLV_2D   = 0.0
-      RTWIDr   = 0.0
-      SENRT_2D = 0.0
-      SUMEX    = 0.0
-      SUMRL    = 0.0
-      SATFAC   = 0.0
-      RTDEP    = 0.0
-      RTWID    = 0.0
-      TRLV     = 0.0
-      RFAC3 = RFAC1
+        SRDOT    = 0.0 ! SRDOT     Daily root senescence (g / m2 / d)
+        RLV      = 0.0
+        RLV_2D   = 0.0
+        RTWIDr   = 0.0
+        SENRT_2D = 0.0
+        SUMEX    = 0.0 !Sum over all layers of water excess factor times depth ! JZW ask Cheryl
+        SUMRL    = 0.0 !Sum of root length density (integral over depth)
+        SATFAC   = 0.0 ! Root length weighted soil water excess stress factor ( 0 = no stress; 1 = saturated stress ) 
+        RTDEP    = 0.0
+        RTWID    = 0.0
+        TRLV     = 0.0
+        RFAC3 = RFAC1  ! JZW this should be done for every run?
       
-      CumRootMass = 0.0
+        ! RFAC1     Root length per unit  root weight. (cm/g)
+        ! RFAC3     Ratio of root length to root weight at the current time (cm/g)
+        CALL OPRoots_2D(TotRootMass, RFAC3, RLV_2D, Thick, Width)
+      Endif ! if RUN!=1, JZW need to check ????										   
+      CumRootMass = 0.0  ! JZW this is wrong??? ask Cheryl
 !     Width of half row (cm) used to scale up to field area basis
       HalfRow = ROWSPC * 100. / 2.  
 
@@ -202,14 +211,20 @@
 !       day of emergence.  (GROW emergence initialization
 !       must preceed call to INROOT.)
 !-----------------------------------------------------------------------
-      CALL INROOT_2D(
-     &  DepMax, FirstRow, FRRT, HalfRow, PLTPOP, RFAC1,    !Input
-     &  RTDEPI, RTWIDI, Thick, WidMax, Width, WTNEW,       !Input
-     &  RLV_2D, RTDEP, RTWID, RTWIDr)                      !Output
+      IF (CONTROL %RUN == 1 .OR. INDEX('FPQ',CONTROL%RNMODE) < 0) THEN
+       if (PLME .EQ. 'T')
+     &     CALL Read_IFile (CONTROL, RDPI=RTDEPI ) !RWAT= ,GSTI=VSTAGE 																   
+        CALL TG_INROOT_2D(
+     &    DepMax, FirstRow, FRRT, HalfRow, PLTPOP, RFAC1,    !Input
+     &    RTDEPI, RTWIDI, Thick, WidMax, Width, WTNEW,       !Input
+     &    RLV_2D, RTDEP, RTWID, RTWIDr)                      !Output
 
-      RFAC3 = RFAC1
+        RFAC3 = RFAC1
 
-      CumRootMass = WTNEW * FRRT * PLTPOP * 10. 
+        CumRootMass = WTNEW * FRRT * PLTPOP * 10. 
+      Else
+        CumRootMass = 0.0  ! JZW question it is wrong???
+      endif 		
 !        kg[root]  g[tissue] g[root]    plants   kg/ha
 !        -------- = ----- * --------- * ------ * ----- 
 !           ha      plant   g[tissue]     m2      g/m2
@@ -219,8 +234,8 @@
      &    NLAYR, RFAC3, RLV_2D, Struc,                    !Input
      &    RLV, TRLV, TotRootMass)                         !Output
 
-      LastRow = 0
-      LastCol = 0
+      LastRow = 1
+      LastCol = 1
 
 !***********************************************************************
 !***********************************************************************
@@ -455,7 +470,7 @@
 !       cm[row length]   cm3[ground]               
         ENDDO
       ENDDO
-      RLSENTOT = RLSENTOT   !cm[root]/cm[row length]
+      RLSENTOT = RLSENTOT   !cm[root]/cm[row length]   ! JZW question, this statement is non-sense??
 
 !     If senescence too high (results in TRLV < TRLV_MIN) then
 !       reduce senescence in each layer by factor.
@@ -518,6 +533,7 @@
      &    DLAYR, FirstRow, HalfRow,     !Input
      &    NLAYR, RFAC3, RLV_2D, Struc,                    !Input
      &    RLV, TRLV, TotRootMass)                         !Output
+      ! JZW, here we do not need TotRootMass, thus we do not need RFAC3
 
       CALL Cell2Layer_2D(SENRT_2D, Struc, NLAYR, SENRT)
       CELLS%STATE%RLV = RLV_2D
@@ -538,7 +554,7 @@
 !***********************************************************************
 
       RETURN
-      END SUBROUTINE ROOTY_2D
+      END SUBROUTINE TG_ROOTY_2D
 !=======================================================================
 
 
@@ -553,7 +569,7 @@
 !  Called : ROOTS
 !  Calls  : FIND, ERROR, IGNORE
 !=======================================================================
-      SUBROUTINE IPROOT_2D(FILECC,                        !Input
+      SUBROUTINE TG_IPROOT_2D(FILECC,                        !Input
      &  PORMIN, RFAC1, RLDSM, RTDEPI, RTEXF, RTSEN, RTSDF,!Output
      &  RTWIDI, RTWTMIN, XRTFAC, YRTFAC, XRTFACH, YRTFACH)!Output
 
@@ -644,7 +660,7 @@
 
 !***********************************************************************
       RETURN
-      END SUBROUTINE IPROOT_2D
+      END SUBROUTINE TG_IPROOT_2D
 !=======================================================================
 
 !=======================================================================
@@ -660,7 +676,7 @@
 !  Called : CROPGRO
 !  Calls  : None
 !=======================================================================
-      SUBROUTINE INROOT_2D(
+      SUBROUTINE TG_INROOT_2D(
      &  DepMax, FirstRow, FRRT, HalfRow, PLTPOP, RFAC1,    !Input
      &  RTDEPI, RTWIDI, Thick, WidMax, Width, WTNEW,       !Input
      &  RLV_2D, RTDEP, RTWID, RTWIDr)                      !Output
@@ -685,7 +701,7 @@
       TotRootArea = 0.0
       RTDEP = RTDEPI
 !     Should this be divided by 2? we are modeling half a row!
-      RTWID = RTWIDI
+      RTWID = RTWIDI! JZW should times 0.5, because we only consider half of bed
       RTWIDr = 0.0
       X = 0.0
       Z = 0.0
@@ -750,63 +766,12 @@
       
 !***********************************************************************
       RETURN
-      END SUBROUTINE INROOT_2D
+      END SUBROUTINE TG_INROOT_2D
 !=======================================================================
 
 
 
-!=======================================================================
-      SUBROUTINE Aggregate_Roots(
-     &    DLAYR, FirstRow, HalfRow,     !Input
-     &    NLAYR, RFAC3, RLV_2D, Struc,                    !Input
-     &    RLV, TRLV, TotRootMass)                         !Output
 
-      Use Cells_2D
-      IMPLICIT NONE
-      SAVE
-
-      INTEGER FirstRow, Row, Col, L, NLAYR
-      REAL HalfRow, RFAC3, TRLV, TotRootMass
-      REAL, DIMENSION(NL) :: DLAYR, RLV
-      REAL, DIMENSION(MaxRows,MaxCols) :: RLV_2D, Width, Thick, RtLen
-      TYPE (CellStrucType) Struc(MaxRows,MaxCols)
-
-      Width = Struc%Width
-      Thick = Struc%Thick
-
-      TRLV = 0.0
-      DO Row = FirstRow, NRowsTot
-        DO Col = 1, NColsTot
-          RtLen(Row,Col) =RLV_2D(Row,Col)*THICK(Row,Col)*Width(Row,Col)
-!             cm[root]         cm[root]
-!          -------------- =   ----------- * cm[cell depth] * cm[cell width]
-!          cm[row length]     cm3[ground]
-
-          TRLV = TRLV + RtLen(Row,Col)
-        ENDDO
-      ENDDO
-
-      TotRootMass = TRLV / HalfRow / RFAC3 * 1.E5
-!                 cm[root]           1          g[root]   1E4 cm2    10(kg/ha)
-!      kg/ha  = ------------- * ------------- * ------- * -------- * ---------
-!              cm[row length]   cm[row width]   cm[root]     m2        (g/m2)
-
-!     Aggregate cells across a row to get layer total.  Units for layers
-!     are in cm[root]/cm[row length]
-      CALL Cell2Layer_2D(
-     &   RtLen, Struc, NLAYR,                 !Input
-     &   RLV)                                  !Output
-
-      DO L = 1, NLAYR
-        RLV(L) = RLV(L) / HalfRow / DLAYR(L)
-!    cm[root]       cm[root]            1               1
-!  ----------- = -------------- * ------------- * -----------------
-!  cm3[ground]   cm[row length]   cm[row width]   cm[row thickness]
-      ENDDO
-
-      RETURN
-      END Subroutine Aggregate_Roots
-!=======================================================================
 
 
 !-----------------------------------------------------------------------
@@ -876,6 +841,8 @@
 ! SAT(Row,Col)    Volumetric soil water content in layer L at saturation
 !             (cm3 [water] / cm3 [soil])
 ! SRDOT     Daily root senescence (g / m2 / d)
+! SUMEX     Sum over all layers of water excess factor times depth
+! SUMRL     Sum of root length density (integral over depth)														
 ! SW(Row,Col)     Volumetric soil water content in layer L
 !             (cm3 [water] / cm3 [soil])
 ! SWDF      Soil water deficit factor for layer with deepest roots (0-1) 
@@ -901,158 +868,66 @@
 !             XRTFAC(I). (cm / (physiol. day))
 !***********************************************************************
 !      END SUBROUTINES ROOTS, IPROOT, and INROOT
-!=======================================================================
-
-
-!=======================================================================
-!  OPRoots_2D, Subroutine, C.H.Porter from Soil Water portions of OPDAY
-!  Generates output for daily soil water data
-!-----------------------------------------------------------------------
-!  REVISION       HISTORY
-!  07/02/2009 CHP Written
-!-----------------------------------------------------------------------
-!  Called from:   WatBal2D
-!  Calls:         None
-!=======================================================================
-      SUBROUTINE OPRoots_2D(TotRootMass, RFAC3, RLV_2D, Thick, Width)
-!                                 kg/ha,  cm/g, cm/cm3,   cm , cm
-!-----------------------------------------------------------------------
-      USE Cells_2D
-      USE ModuleData
-      IMPLICIT NONE
-      SAVE
-
-      REAL, DIMENSION(MaxRows,MaxCols), INTENT(IN) :: RLV_2D,Thick,Width
-      REAL, INTENT(IN) :: TotRootMass, RFAC3
-
-      CHARACTER*1 IDETG, IDETL, RNMODE
-      CHARACTER*10 OUTRoot
-      PARAMETER (OUTRoot = 'Root2D.OUT')
-      CHARACTER*17 FMT
-
-      INTEGER COL, DAS, DOY, DYNAMIC, ERRNUM, FROP
-      INTEGER NOUTDW, ROW, RUN
-      INTEGER YEAR, YRDOY, REPNO, YRSTART, INCDAT
-
-      LOGICAL FEXIST, DOPRINT
-
-!-----------------------------------------------------------------------
-!     Define constructed variable types based on definitions in
-!     ModuleDefs.for.
-      TYPE (ControlType) CONTROL
-      TYPE (SwitchType)  ISWITCH
-      
-      CALL GET(CONTROL)
-
-      DAS     = CONTROL % DAS
-      DYNAMIC = CONTROL % DYNAMIC
-      FROP    = CONTROL % FROP
-      RUN     = CONTROL % RUN
-      RNMODE  = CONTROL % RNMODE
-      REPNO   = CONTROL % REPNO
-      YRDOY   = CONTROL % YRDOY
-
-      CALL YR_DOY(YRDOY, YEAR, DOY) 
-
-!***********************************************************************
-!***********************************************************************
-!     Seasonal initialization - run once per season
-!***********************************************************************
-      IF (DYNAMIC == SEASINIT) THEN
-!-----------------------------------------------------------------------
-!   Set initial values to calculate average values
-!-----------------------------------------------------------------------
-      CALL GET(ISWITCH)
-      IDETL   = ISWITCH % IDETL
-      IDETG   = ISWITCH % IDETG
-
-      IF (IDETG == 'N' .OR. IDETL == '0') THEN
-        DOPRINT = .FALSE.
-      ELSE
-        DOPRINT = .TRUE.
-      ENDIF
-      IF (.NOT. DOPRINT) RETURN
-
-!-----------------------------------------------------------------------
-!   Generate headings for output file
-!-----------------------------------------------------------------------
-      CALL GETLUN('OUTRoot', NOUTDW)
-      INQUIRE (FILE = OUTRoot, EXIST = FEXIST)
-      IF (FEXIST) THEN
-        OPEN (UNIT = NOUTDW, FILE = OUTRoot, STATUS = 'OLD',
-     &    IOSTAT = ERRNUM, POSITION = 'APPEND')
-      ELSE
-        OPEN (UNIT = NOUTDW, FILE = OUTRoot, STATUS = 'NEW',
-     &    IOSTAT = ERRNUM)
-        WRITE(NOUTDW,'("*2D ROOTS DAILY OUTPUT FILE")')
-      ENDIF
-
-!-----------------------------------------------------------------------
-!     Variable heading for WATER.OUT
-!-----------------------------------------------------------------------
-      IF (RNMODE .NE. 'Q' .OR. RUN .EQ. 1) THEN
-        IF (RNMODE .EQ. 'Q') THEN
-          CALL HEADER(SEASINIT, NOUTDW, REPNO)
-        ELSE
-          CALL HEADER(SEASINIT, NOUTDW, RUN)
-        ENDIF
-
-        YRSTART = YRDOY
-        CALL YR_DOY(INCDAT(YRSTART,-1),YEAR,DOY)
-      ENDIF
-
-!***********************************************************************
-!***********************************************************************
-      ENDIF !DYNAMIC CONTROL
-!***********************************************************************
-!***********************************************************************
-!     Daily Output
-!***********************************************************************
-      IF (DYNAMIC == SEASINIT .OR. DYNAMIC == OUTPUT .OR. 
-     &      DYNAMIC == SEASEND) THEN
-!-----------------------------------------------------------------------
-      IF (DOPRINT) THEN
-!           Print initial conditions, 
-        IF (DYNAMIC == SEASINIT .OR.
-!           Print every FROP days, and
-     &     (DYNAMIC .EQ. OUTPUT .AND. MOD(DAS, FROP) .EQ. 0) .OR. 
-!           Print on last day if not already done.
-     &     (DYNAMIC .EQ. SEASEND  .AND. MOD(DAS, FROP) .NE. 0)) THEN
-
-          Write(NOUTDW,'(/,"Year DOY:",I5,I4.3)') YEAR, DOY
-          Write(NOUTDW,'("Root Mass =     ",F10.2," kg/ha")')TotRootMass
-          Write(NOUTDW,'("Root L:M ratio =",F10.2," cm/g")') RFAC3
-
-          Write(NOUTDW,'("  Column ->",20I10)') (Col, Col=1, NColsTOT)
-          Write(NOUTDW,'("Width(cm)->",20F10.3)') 
-     &                  (width(1,Col),Col = 1, NColsTOT)
-          Write(NOUTDW,'("      Thick")') 
-          Write(NOUTDW,'("Lyr    (cm)   ------- ",
-     &  "RLV (cm[root]/cm3[soil] -------")')
-          WRITE(FMT,'("(I3,F8.1,",I2,"F10.4)")') NColsTot 
-          DO Row = 1, NRowsTot  
-            Write(NOUTDW,FMT)     
-     &      Row, Thick(Row,1), (RLV_2D(Row,Col),Col = 1, NColsTOT) 
-          Enddo 
-
-        ENDIF
-      ENDIF
-
-!***********************************************************************
-!***********************************************************************
-!     SEASEND - Sesaonal Output
-!***********************************************************************
-        IF (DYNAMIC .EQ. SEASEND) THEN
-!-----------------------------------------------------------------------
-            !Close daily output files.
-            CLOSE (NOUTDW)
-        ENDIF
-!***********************************************************************
-!***********************************************************************
-!     END OF DYNAMIC IF CONSTRUCT
-!***********************************************************************
-      ENDIF
-!***********************************************************************
-      RETURN
-      END SUBROUTINE OPRoots_2D
+! The difference between ROOTS and ROOTS_2D:
+! 2D version: Do loop for both Row & Col
+! 2D use  RLDF(Row,Col) = CELLS(Row,Col)%STATE%WR * CellArea(Row,Col) * MIN(SWDF,SWEXF)
+!         RLDF(Row,Col) =RLDF(Row,Col)*DepFrac(Row,Col)*WidFrac(Row,Col);
+! 1D use: RLDF(L) = WR(L) * DLAYR(L) * MIN(SWDF,SWEXF)  ! Note unit is different
+!         RLDF(L) = RLDF(L) * (1. - (CUMDEP - RTDEP) / DLAYR(L))
+!---------------------------
+! 2D For col=1, handling similar to 1D, then add the case of Col!=1 
+! 2D Add LastCumdep represent Yesterday's Cumdep, use it to decide when horizental grow
+! 2D Add RTDEPnew which is same as RTDEP of 1D
+! 1D:   IF (CUMDEP .LT. RTDEP) THEN
+!         TRLDF =
+!       ELSE 
+!         RTDEP =
+!         RLDF =
+!         TRLFD = 
+!         GOTO - - 
+!       ENDIF
+! 2D: IF (COL == 1) THEN
+!       IF (RTDEP >= CUMDEP) THEN
+!         DepFrac(Row,Col) = 
+!       ELSEIF (RTDEP >= LastCumDep)THEN
+!         RTDEPnew =
+!         DepFac(Row,Col)=
+!         LastRow=
+!       Else
+!         DepFac(Row,Col)= 
+!       ENDIF
+!       IF (RTDEPnew > LastCumDep .AND. RTDEP <= LastCumDep) THEN
+!         RTWIDnew(Row) = Width(Row,Col)
+!         DepFrac(Row,Col) = 
+!       ENDIF
+!     Else !(COL !=1)
+!       IF (RTWIDr(Row) >= CumWid) THEN
+!         WidFrac(Row,Col) = 
+!         DepFrac(Row,Col) = 
+!       ELSEIF (RTWIDr(Row) >= LastCumWid) THEN
+!         IF (CELLS(Row,Col)%STATE%WR > 0.0 .AND. RLNEW > 0.0) THEN
+!           RTWIDnew(Row) = 
+!         ENDIF
+!           WidFrac(Row,Col) = 
+!           LastCol = 
+!           DepFrac(Row,Col) =
+!       ELSE
+!           WidFrac(Row,Col) = 
+!           DepFrac(Row,Col) = 
+!       ENDIF             
+!           IF (RTWIDnew(Row) > LastCumWid .AND. RTWIDr(Row) <= LastCumWid) THEN
+!              WidFrac(Row,Col) = 
+!              DepFrac(Row,Col) = 
+!              LastCol = Col
+!           ENDIF
+!     ENDIF (For COL !=1)
+!          RLDF(Row,Col) =
+!          TRLDF = 
+!          IF (RTWIDnew(Row) < CumWid) EXIT ColLoop      
+!   ENDDO ColLoop
+! ENDDO RowLoop
+! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!Jin Question: where is the codes for "Horizontal root growth only occurs when DepFrac of adjacent cell is > 0.99."
+! If this will make the root grow related to the definition of column devider? 
+! RTDEPc(Col) is not used?
 !=======================================================================

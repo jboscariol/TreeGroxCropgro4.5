@@ -19,12 +19,13 @@ C  03/12/2003 CHP Changed senescence variable to composite (SENESCE)
 C                   as defined in ModuleDefs.for
 C  03/24/2004 CHP Added P component of senesced matter
 C  01/19/2006 CHP N in senesced roots lost at actual N%, not minimum.
+!  09/23/2011 JZW/CHP Convert from CROPGRO to TREEGRO subroutines																 
 C-----------------------------------------------------------------------
 C  Called by:  PLANT
 C  Calls:      IPGROW, STRESS
 C              ERROR
 C=======================================================================
-      SUBROUTINE GROW(CONTROL, ISWITCH, DYNAMIC, SOILPROP, 
+      SUBROUTINE TG_GROW(CONTROL, ISWITCH, DYNAMIC, SOILPROP, 
      &  AGEFAC, CADLF, CADST, CRUSLF, CRUSRT, CRUSSH,     !Input
      &  CRUSST, DISLA, F, FILECC, FRLF, FRSTM,            !Input
      &  NADLF, NADRT, NADST, NDTH, NFIXN, NGRLF, NGRRT,   !Input
@@ -151,7 +152,8 @@ C=======================================================================
 !     P module
       REAL ADD
       REAL ShutMob, RootMob, ShelMob
-
+!     Added for TREEGRO warning message
+      CHARACTER*78 MSG(2)					 
 !-----------------------------------------------------------------------
 !     Constructed variable types defined in ModuleDefs.for.
       TYPE (ControlType) CONTROL
@@ -179,6 +181,8 @@ C=======================================================================
 !***********************************************************************
       IF (DYNAMIC == RUNINIT) THEN
 !-----------------------------------------------------------------------
+      ! Add the following if statement by JZW
+      ! IF (CONTROL%RUN .EQ. 1 .OR. INDEX('QF',CONTROL%RNMODE).LE. 0) THEN																  
       CALL IPGROW(
      &  FILEIO, FILECC,  CROP,                                  !Input
      &  ALPHL,  ALPHR,  ALPHS,  ALPHSH,                         !Output
@@ -224,125 +228,150 @@ C-----------------------------------------------------------------------
         PCNMIN = PROLFF * 16.0            !Moved from INCOMP
 !-----------------------------------------------------------------------
       ENDIF
-
+    ! endif
 !***********************************************************************
 !***********************************************************************
 !     Seasonal initialization - run once per season
 !***********************************************************************
       ELSEIF (DYNAMIC == SEASINIT) THEN
 !-----------------------------------------------------------------------
-      ALFDOT = 0.0
-      AREALF = 0.0
-      AREAH  = 0.0
-      CANWAA = 0.0
-      CANNAA = 0.0
-      GROWTH = 0.0
-      GRWRES = 0.0
-      LAIMX  = 0.0
-      NLDOT  = 0.0
-      NSDOT  = 0.0
-      NRDOT  = 0.0
-      NSDDOT = 0.0
-      NSHDOT = 0.0
-      NTOVR  = 0.0
-      PCCSD  = 0.0
-      PCLSD  = 0.0
-      PCNL   = 0.0
-      PCNRT  = 0.0
-      PCNSD  = 0.0
-      PCNSH  = 0.0
-      PCNST  = 0.0
-      PODWT  = 0.0
-      RHOL   = 0.0
-      RHOR   = 0.0
-      RHOS   = 0.0
-      RHOSH  = 0.0
-      RTWT   = 0.0
-      SDRATE = 0.0
-      SDWT   = 0.0
-      SDWTAM = 0.0
-      SEEDNI = 0.0
-      SEEDNO = 0.0
+      !If (CONTROL % MULTI <2) then
+      IF (CONTROL%RUN .EQ. 1 .OR. INDEX('QPF',CONTROL%RNMODE).LE.0) THEN
+        AREALF = 0.0  !Area of leaves (one side) per unit ground area
+        AREAH  = 0.0  !Area of healthy leaves
+       ! PCCSD  = 0.0  !Percentage of carbohydrate in seed tissue
+       ! PCLSD  = 0.0  !Percentage of lipid in seed tissue
+        PCNL   = 0.0  !Percentage of N in leaf tissue
+        PCNRT  = 0.0  !Percent N in root tissue
+      !  PCNSD  = 0.0  !Percentage of N in seed tissue
+      !  PCNSH  = 0.0  !Percentage of N in shell tissue
+        PCNST  = 0.0  !Percent N in stem tissue
+        RHOL   = 0.0  !Fraction of leaf which is carbohydrate
+        RHOR   = 0.0  !Fraction of root which is carbohydrate
+        RHOS   = 0.0  !Fraction of stem which is carbohydrate
+        RTWT   = 0.0  !Dry mass of root tissue, including C and N
+        
+        SLAAD  = 0.0  !Specific leaf area, excluding weight of C stored in leaves
+        STMWT  = 0.0  !Dry mass of stem tissue, including C and N
+        
+        WCRLF  = 0.0  !Mass of CH2O reserves in leaves
+        WCRRT  = 0.0  !Mass of CH2O reserves in roots
+        WCRST  = 0.0  !Mass of CH2O reserves in stems
+        WNRLF  = 0.0  !N available for mobilization from leaves above lower limit of mining
+        WNRRT  = 0.0  !N available for mobilization from roots above lower limit of mining
+        WTLF   = 0.0  !Dry mass of leaf tissue including C and N
+        WTMAIN = 0.0  !Mass of tissue assumed to require maintenance
+        WTNCAN = 0.0  !Mass of N in canopy
+        WTNLF  = 0.0  !Mass of N in leaves
+        WTNNOD = 0.0  !Mass of N in nodules
+        WTNRT  = 0.0  !Mass of N in roots    
+        WTNSD  = 0.0  !Mass of N in seeds
+        ShutMob = 0.0 !ShutMob:Amount of leaf mass lost due to N and C mobilization
+                      !ShutMob:Mobilization loss for leaf and stem
+        RootMob = 0.0 !Mobilization loss for roots
+        
+        SDPDOT = 0.0  !CHP - not used. Daily seed puncture damage
+        PUNDOT = 0.0  !CHP - not used. Daily puncture damage
+        
+        NLPEST = 0.0  !CHP - N loss due to pest damage
+      ENDIF
+        ALFDOT = 0.0  !Rate of leaf expansion
+        CANWAA = 0.0  !Canopy weight at flowering stage
+        CANNAA = 0.0  !Weight of N in total plant at flowering
+        GROWTH = 0.0  !Total new growth of plant tissue on a day
+        GRWRES = 0.0  !Growth respiration
+        LAIMX  = 0.0  !Maximum leaf area index this season
+        NLDOT  = 0.0  !Net N addition for leaves
+        NSDOT  = 0.0  !Net N addition for stems
+        NRDOT  = 0.0  !Net N addition for roots
+        NSDDOT = 0.0  !Net N addition for seeds
+        NSHDOT = 0.0  !Net N addition for shells
+        NTOVR  = 0.0  !(Not used)
+        PCCSD  = 0.0  !Percentage of carbohydrate in seed tissue
+        PCLSD  = 0.0  !Percentage of lipid in seed tissue
+        PCNSD  = 0.0  !Percentage of N in seed tissue
+        PCNSH  = 0.0  !Percentage of N in shell tissue
+        PODWT  = 0.0  !Dry mass of seeds plus shells, including C and N
+        RHOSH  = 0.0  !Fraction of shell which is carbohydrate
+        SDRATE = 0.0  !Seeding rate, mass of seed sown
+        SDWT   = 0.0  !Dry mass of seed tissue, including C and N
+        SDWTAM = 0.0  !Seed weight at maturity
+        SEEDNI = 0.0  !Seed or transplant N at planting
+        SEEDNO = 0.0  !Total number of seeds
+        
+        TGROW  = 0.0  !Cumulative growth of plant tissue
+  !     Recalculate from previous values
+       ! IF (CONTROL%RUN .EQ. 1 .OR. INDEX('QPF',CONTROL%RNMODE).LE.0) THEN ! Add if condiion by JZW
+        TOPWT  = WTLF + STMWT !Total weight of above-ground portion of crop, including pods
+        TOTWT  = TOPWT + RTWT !Total weight of crop
+      !  endif
+        
+        SenWt  = 0.0  !Leaf senescence due to N mobilization
+        SenLig = 0.0  !ResLig: lignin content of senesced material kg[lignin]/ha
+        SenE   = 0.0  !Surface N/P/S senescence. !\kg[E]/ha (E=N, P, S,...)
+        SENESCE % ResWt  = 0.0 !??Amount of plant residue left in field
+        SENESCE % ResLig = 0.0 !lignin content of senesced material kg[lignin]/ha
+        SENESCE % ResE   = 0.0 !kg[E]/ha/d (E=N,P,K,..)
+        SENESCE % CumResE(N) = 0.0
 
-      SenWt  = 0.0
-      SenLig = 0.0
-      SenE   = 0.0
-      SENESCE % ResWt  = 0.0
-      SENESCE % ResLig = 0.0
-      SENESCE % ResE   = 0.0
-      SENESCE % CumResE(N) = 0.0
-
-      SHELWT = 0.0
-      SLAAD  = 0.0
-      STMWT  = 0.0
-      TGROW  = 0.0
-      TOPWT  = 0.0
-      TOTWT  = 0.0
-      WCRLF  = 0.0
-      WCRRT  = 0.0
-      WCRSH  = 0.0
-      WCRST  = 0.0
-      WNRLF  = 0.0
-      WNRRT  = 0.0
-      WNRSH  = 0.0
-      WNRST  = 0.0
-      WSDDOT = 0.0
-      WSHDOT = 0.0
-      WTCO   = 0.0
-      WTCSD  = 0.0
-      WTLF   = 0.0
-      WTLO   = 0.0
-      WTLSD  = 0.0
-      WTMAIN = 0.0
-      WTNCAN = 0.0
-      WTNLA  = 0.0
-      WTNLF  = 0.0
-      WTNLO  = 0.0
-      WTNMOB = 0.0
-      WTNNA  = 0.0
-      WTNNAG = 0.0
-      WTNNO  = 0.0
-      WTNNOD = 0.0
-      WTNOO  = 0.0
-      WTNRA  = 0.0
-      WTNRO  = 0.0
-      WTNRT  = 0.0
-      WTNSA  = 0.0
-      WTNSD  = 0.0
-      WTNSDA = 0.0
-      WTNSDO = 0.0
-      WTNSH  = 0.0
-      WTNSHA = 0.0
-      WTNSHO = 0.0
-      WTNSO  = 0.0
-      WTNST  = 0.0
-      WTNTOT = 0.0
-      WTNUP  = 0.0
-      WTRO   = 0.0
-      WTSDO  = 0.0
-      WTSHO  = 0.0
-      WTSO   = 0.0
-      XLAI   = 0.0
-      XHLAI  = 0.0
-      XPOD   = 0.0
-
-      CLW = 0.0   !Cumulative leaf growth
-      CSW = 0.0   !Cumulative stem growth
-
-      ShutMob = 0.0
-      RootMob = 0.0
-      ShelMob = 0.0
-
-      SDPDOT = 0.0    !CHP - not used
-      PUNDOT = 0.0    !CHP - not used
-
-      NLPEST = 0.0    !CHP - N loss due to pest damage
-
+        SHELWT = 0.0  !Total mass of all shells
+       ! IF (CONTROL%RUN .EQ. 1 .OR. INDEX('QPF',CONTROL%RNMODE).LE.0) THEN
+        WCRSH  = 0.0  !Mass of CH2O reserves in shells
+        WNRSH  = 0.0  !N available for mobilization from shells above lower limit of mining
+        WNRST  = 0.0  !N available for mobilization from stems above lower limit of mining
+        
+        WSDDOT = 0.0  !Net seed growth rate		  
+        WSHDOT = 0.0  !Net shell growth rate
+      !  endif
+        WTCO   = 0.0  !Cumulative losses of plant tissue
+        WTCSD  = 0.0  !Cumulative carbohydrate added to seeds
+        WTLO   = 0.0  !Cumulative leaf losses
+        WTLSD  = 0.0  !Cumulative lipids added to seeds
+        WTNLA  = 0.0  !Cumulative N added to leaves
+        WTNLO  = 0.0  !Cumulative N loss from leaves
+        WTNMOB = 0.0  !Cumulative mobilized N
+        WTNNA  = 0.0  !Cumulative N added to nodules
+        WTNNAG = 0.0  !Total accumulated N used in nodule growth
+        WTNNO  = 0.0  !Cumulative N loss from nodules
+        WTNOO  = 0.0  !Cumulative nodule losses
+        WTNRA  = 0.0  !Cumulative N added to roots
+        WTNRO  = 0.0  !Cumulative N loss from roots
+        WTNSA  = 0.0  !Cumulative N added to stems
+        WTNSDA = 0.0  !Cumulative N added to seeds
+        WTNSDO = 0.0  !Cumulative N loss from seeds		  
+        WTNSH  = 0.0  !Mass of N in shells
+        WTNSHA = 0.0  !Cumulative N added to shells
+        WTNSHO = 0.0  !Cumulative N loss from shells
+        WTNSO  = 0.0  !Cumulative N loss from stems
+        IF (CONTROL%RUN.EQ.1 .OR. INDEX('QPF',CONTROL%RNMODE).LE.0) THEN
+          WTNST  = 0.0  !Mass of N in stems
+          WTNTOT = 0.0  !Total plant N content
+        Endif
+        
+        WTNUP  = 0.0  !Cumulative N uptake
+        WTRO   = 0.0  !Cumulative root losses
+        WTSDO  = 0.0  !Cumulative seed losses
+        WTSHO  = 0.0  !Cumulative shell losses
+        WTSO   = 0.0  !Cumulative stem losses
+        IF (CONTROL%RUN.EQ.1 .OR. INDEX('QPF',CONTROL%RNMODE).LE.0) THEN
+        XLAI   = 0.0  !Leaf area (one side) per unit of ground area
+        XHLAI  = 0.0  !Healthy leaf area index
+        endif
+        XPOD   = 0.0  !Growth partitioning to pods which slows node appearance
+        if (CONTROL%RUN .EQ.1 .OR.INDEX('QPF',CONTROL%RNMODE).LE.0) then
+          CLW = 0.0     !Cumulative leaf growth here CLW represent as life cumulative value
+          CSW = 0.0     !Cumulative stem growth
+        endif 
+        
+        ShelMob = 0.0 !Mobilization loss for shells
 !-----------------------------------------------------------------------
 ! KJB 02/12/03 Set SLA to zero until emergence
 ! JWJ 09/16/03 Set SLA to -99 until emergence
 ! CHP 09/17/03 Do this for output only - SLA is used in calculations!
-      SLA = 0.0
+		! Add by JZW
+        IF (CONTROL%RUN.EQ.1 .OR. INDEX('QPF',CONTROL%RNMODE).LE.0) THEN																				
+          SLA = 0.0   !Specific leaf area
+        endif 
 !     Need to get initial value of F from DEMAND first  chp 9/14/98
 !      IF (CROP .NE. 'FA') THEN
 !        SLA    = F                 
@@ -355,94 +384,142 @@ C-----------------------------------------------------------------------
 !***********************************************************************
       ELSEIF (DYNAMIC == EMERG) THEN
 !-----------------------------------------------------------------------
-!     Net growth rates
-      WLDOT  = 0.0
-      WSDOT  = 0.0
-      WRDOT  = 0.0
-      WNDOT  = 0.0
-      WPDOT  = 0.0
-      WLFDOT = 0.0
+      IF (CONTROL % RUN == 1 .OR. INDEX('FPQ',CONTROL%RNMODE) < 0) THEN
+!       Net growth rates
+        WLDOT  = 0.0    !Net leaf growth rate (g[leaf] / m2 / d)
+        WSDOT  = 0.0    !Dry weight growth rate of new stem tissue including N but not C 
+        WRDOT  = 0.0    !Dry weight growth rate of new root tissue including N but not C 
+        WNDOT  = 0.0    !Net nodule growth rate (g[nodule] / m2 / d)
+        WPDOT  = 0.0    !Net pod growth rate (g[pod] / m2 / d)
+        WLFDOT = 0.0    !Leaf weight losses due to freezing (g[leaf]/m2-d)
 
-C     Initial seedling or transplant weight
-      SDRATE  = WTPSD * PLTPOP / 0.8 * 10
+C       Initial seedling or transplant weight
+        SDRATE  = WTPSD * PLTPOP / 0.8 * 10
+        !WTPSD: Maximum weight per seed under non-limiting substrate (g / seed)
+        !PLTPOP: Plant population (# plants / m2)
+        IF (PLME .NE. 'T') THEN
+          WTNEW  = WTFSD * WTPSD !WTNEW: Initial mass of seedling or seed (g / plant)
+          TOTWT  = WTNEW * PLTPOP !WTFSD:Relative weight of seed compared to maximum (fraction)
+        ELSE
+!         TOTWT = SDWTPL / 10.
+!         TREEGRO version of CROPGRO - SDWTPL is in tons/ha instead of kg/ha
+          TOTWT = SDWTPL / 10. * 1000.   !TOTWT: Total weight of crop in g/m2
+          WTNEW = TOTWT / PLTPOP         !g/plant
+!         Send message to WARNING.OUT
+          MSG(1) = "Initial plant biomass input in tons/ha (not kg/ha)."
+          WRITE(MSG(2),'(A,F8.3,A)') "PLWT = ", SDWTPL, "t/ha"
+          CALL WARNING(2,ERRKEY,MSG)
+        ENDIF
 
-      IF (PLME .NE. 'T') THEN
-        WTNEW  = WTFSD * WTPSD
-        TOTWT  = WTNEW * PLTPOP
-      ELSE
-        TOTWT = SDWTPL / 10.
-        WTNEW = TOTWT / PLTPOP
-      ENDIF
+!       Initial mass of plant components
+        WTLF  = FRLF * TOTWT  !WTLF: Dry mass of leaf tissue including C and N
+        !FRLF: Fraction of vegetative tissue growth that goes to leaves on a day (g [leaf] / g [veg])
+        STMWT = FRSTM * TOTWT !STMWT: Dry mass of stem tissue, including C and N
+        !FRSTM: Fraction of vegetative tissue growth that goes to stems on a day (g[stem] / g[veg])
+        TOPWT = WTLF + STMWT
+        RTWT  = TOTWT - TOPWT
+		   
 
-!     Initial mass of plant components
-      WTLF  = FRLF * TOTWT
-      STMWT = FRSTM * TOTWT
-      TOPWT = WTLF + STMWT
-      RTWT  = TOTWT - TOPWT
+        WLFI   = WTLF  !WLFI: Initial weight of leaves (g[leaf] / m2)
+        WSTI   = STMWT !WSTI: Initial weight of stems (g[stem] / m2)
+        WRTI   = RTWT  !WRTI: Initial weight of roots (g[root] / m2)
+						  
+						   
 
-      WLFI   = WTLF
-      WSTI   = STMWT
-      WRTI   = RTWT
+!       Initialize cumulative variables
+        CLW   = WTLF   !CLW: Cumulative leaf growth (g[leaf]/m2)
+        CSW   = STMWT  !CSW: Cumulative stem growth (g[stem]/m2)
 
-!     Initialize cumulative variables
-      CLW   = WTLF
-      CSW   = STMWT
+!       CH2O reserves
+        WCRLF = ALPHL * WTLF !ALPHL: Fraction of new leaf growth that is mobile C (fraction)
+        WCRST = ALPHS * STMWT !ALPHS: Fraction of new seed growth that is mobile C (fraction)
+        WCRRT = ALPHR * RTWT !ALPHR: Fraction of new root growth that is mobile C (fraction)
+        !WCRLF: Mass of CH2O reserves in leaves (g[leaf CH2O] / m2[ground])
+        !WCRST: Mass of CH2O reserves in stems (g [stem CH2O] / m2 [ground])
+        !WCRRT: Mass of CH2O reserves in roots (g[root CH2O] / m2[ground])
+!!       Initialize cumulative C variables
+!        WCRLA = WCRLF
+!        WCRSA = WCRST
+!        WCRRA = WCRRT
 
-!     CH2O reserves
-      WCRLF = ALPHL * WTLF
-      WCRST = ALPHS * STMWT
-      WCRRT = ALPHR * RTWT
+!       Carbohydrate composition of plant components (fraction)
+        RHOL   = ALPHL !RHOL: Fraction of leaf which is carbohydrate (g [CH20] / g[leaf])
+        RHOR   = ALPHR !RHOR: Fraction of root which is carbohydrate (g [CH2O] / g[root])
+        RHOS   = ALPHS !ALPHS: Fraction of new seed growth that is mobile C (fraction)
+        RHOSH  = ALPHSH !ALPHSH: Fraction of new shell growth that is mobile C (fraction)
 
-!!     Initialize cumulative C variables
-!      WCRLA = WCRLF
-!      WCRSA = WCRST
-!      WCRRA = WCRRT
+!       Net carbon addition variables
+        WRCLDT = 0.0 !Net C addition for leaves (g[CH2O] / m2 /d)
+        WRCSDT = 0.0 !Net C addition for stems (g[CH2O] / m2 /d)
+        WRCRDT = 0.0 !Net C addition for roots (g[CH2O] / m2 /d)
+        WRCSHD = 0.0 !Net C addition for shells (g[CH2O] / m2 /d)
 
-!     Carbohydrate composition of plant components (fraction)
-      RHOL   = ALPHL
-      RHOR   = ALPHR
-      RHOS   = ALPHS
-      RHOSH  = ALPHSH
+!       Compute N in plant components
+        WTNLF  = WLFI * PROLFI * 0.16 !WTNLF: Mass of N in leaves (g[leaf N] / m2[ground])
+        WTNST  = WSTI * PROSTI * 0.16 !WTNST: Mass of N in stems (g[stem N] / m2[ground])
+        WTNRT  = WRTI * PRORTI * 0.16 !WTNRT: Mass of N in roots (g[root N] / m2[ground])
+        WTNSH  = 0.0 !Mass of N in shells (g[N] / m2[ground])
+        WTNSD  = 0.0 !Mass of N in seeds (g[N] / m2[ground])
+        WTNTOT = WTNLF + WTNST + WTNRT + WTNSH + WTNSD
+! PROLFI    Maximum protein composition in leaves during growth with 
+!             luxurious supply of N (g[protein] / g[leaf tissue])
+! PRORTI    Maximum protein composition in roots during growth with 
+!             luxurious supply of N (g[protein] / g[root])
+! PROSTI    Maximum protein composition in stems during growth with 
+!             luxurious supply of N (g[protein] / g[stem])
 
-!     Net carbon addition variables
-      WRCLDT = 0.0
-      WRCSDT = 0.0
-      WRCRDT = 0.0
-      WRCSHD = 0.0
-
-!     Compute N in plant components
-      WTNLF  = WLFI * PROLFI * 0.16
-      WTNST  = WSTI * PROSTI * 0.16
-      WTNRT  = WRTI * PRORTI * 0.16
-      WTNSH  = 0.0
-      WTNSD  = 0.0
-      WTNTOT = WTNLF + WTNST + WTNRT + WTNSH + WTNSD
-
-!     Seed or transplant N at planting
-      SDNPL  = WTPSD * SDPRO * 0.16 * 0.75 * PLTPOP -
-     &  (WTNLF + WTNST + WTNRT)
-      SDNPL  = MAX(SDNPL,0.0)
-      SEEDNI = WTNLF + WTNST + WTNRT + SDNPL
-
-!     Initialize cumulative N variables
-      WTNLA  = WTNLF
-      WTNSA  = WTNST
-      WTNRA  = WTNRT
-
-!     Percent N in plant components
-      PCNL   = WTNLF / WLFI * 100.
-      RNITP  = PCNL
-      PCNST  = WTNST / WSTI * 100.
-      PCNRT  = WTNRT / WRTI * 100.
-
+!       Seed or transplant N at planting
+        SDNPL  = WTPSD * SDPRO * 0.16 * 0.75 * PLTPOP -
+     &    (WTNLF + WTNST + WTNRT)
+      !   SDNPL: Seed N (g[N] / m2)
+      !   WTPSD: Maximum weight per seed under non-limiting substrate (g / seed)
+      !   SDPROR: Ratio to adjust lipid and carbohydrate proportions when seed 
+      !   PLTPOP: Plant population (# plants / m2)						   
+        SDNPL  = MAX(SDNPL,0.0)
+        SEEDNI = WTNLF + WTNST + WTNRT + SDNPL
+        !SEEDNI: Seed or transplant N at planting (g[N] / m2)
+      
+!       Initialize cumulative N variables
+        WTNLA  = WTNLF !WTNLA: Cumulative N added to leaves (g[N]/m2-d)
+                     !WTNLF: Mass of N in leaves (g[leaf N] / m2[ground])
+        WTNSA  = WTNST !WTNSA: Cumulative N added to stems (g[N]/m2-d)
+                     !WTNST: Mass of N in stems (g[stem N] / m2[ground])
+        WTNRA  = WTNRT !WTNRA: Cumulative N added to roots (g[N]/m2-d)
+                     !WTNRT: Mass of N in roots (g[root N] / m2[ground])
+!       Percent N in plant components
+        PCNL   = WTNLF / WLFI * 100. ! PCNL: Percentage of N in leaf tissue (100 g[N] / g[leaf])
+                                   ! WLFI: Initial weight of leaves (g[leaf] / m2)
+        RNITP  = PCNL                ! RNITP: True nitrogen concentration in leaf tissue for photosynthesis 
+        PCNST  = WTNST / WSTI * 100. ! PCNST: Percent N in stem tissue (100 g[N] / g[stem])
+                                   ! WTNST: Mass of N in stems (g[stem N] / m2[ground])
+                                   ! WSTI: Initial weight of stems (g[stem] / m2)
+        PCNRT  = WTNRT / WRTI * 100. ! PCNRT: Percent N in root tissue (100 g[N] / g[root])
 !     Intialize leaf area.  Value of F initialized in DEMAND.
-      AREALF = WTLF * F
-      AREAH  = AREALF
-      SLA    = AREALF / WTLF
-      SLAAD  = AREALF / (WTLF - WCRLF)
-      XLAI   = AREALF / 10000.
-      XHLAI  = XLAI
+        AREALF = WTLF * F            ! AREALF: Area of leaves (one side) per unit ground area
+                                   ! WTLF: Dry mass of leaf tissue including C and N
+        AREAH  = AREALF              ! AREALF: Area of leaves (one side) per unit ground area
+                                   ! AREAH: Area of healthy leaves (cm2[leaf] / m2[ground])
+        SLA    = AREALF / WTLF       ! SLA: Specific leaf area (cm2[leaf] / m2[ground])
+                                   ! WTLF: Dry mass of leaf tissue including C and N
+        SLAAD  = AREALF / (WTLF - WCRLF) ! SLAAD: Specific leaf area, excluding weight of C stored in leaves
+                                       ! WCRLF: Mass of CH2O reserves in leaves (g[leaf CH2O] / m2[ground])
+        XLAI   = AREALF / 10000.         ! XLAI: Leaf area (one side) per unit of ground area
+        XHLAI  = XLAI                    ! XHLAI: Healthy leaf area index (m2[leaf] / m2[ground])
 
+      ELSE
+        IF (CONTROL %RUN == 1 .OR. INDEX('FPQ',CONTROL%RNMODE) < 0) THEN
+!       For season 2, 3, etc.
+!       Initialize cumulative variables
+        CLW   = 0.0   !CLW: Cumulative leaf growth (g[leaf]/m2)
+        CSW   = 0.0   !CSW: Cumulative stem growth (g[stem]/m2)
+        endif
+!       Seed or transplant N at planting
+        SDNPL  = WTNTOT
+!       Initialize cumulative N variables
+        WTNLA  = 0.0 !WTNLA: Cumulative N added to leaves (g[N]/m2-d)
+        WTNSA  = 0.0 !WTNSA: Cumulative N added to stems (g[N]/m2-d)
+        WTNRA  = 0.0 !WTNRA: Cumulative N added to roots (g[N]/m2-d)
+      ENDIF 
 C***********************************************************************
 C***********************************************************************
 C     Daily integration
@@ -1028,6 +1105,9 @@ C-----------------------------------------------------------------------
 C     Leaf Area, Specific Leaf Area Calculations
 C     Calculate Area Growth rate and Update Leaf Area (AREALF, XLAI)
 C-----------------------------------------------------------------------
+      if (control % DAS .eq. 365) then
+       continue
+      endif	   
       ALFDOT = WLDOTN*F - (SLDOT+WLIDOT+WLFDOT+NRUSLF/0.16)*SLA
       IF (WTLF > 1.E-4) THEN
          ALFDOT = ALFDOT + SLA * (NADLF/0.16) *
@@ -1120,324 +1200,7 @@ C***********************************************************************
       ENDIF
 C-----------------------------------------------------------------------
       RETURN
-      END  ! SUBROUTINE GROW
-C=======================================================================
-
-C=======================================================================
-C  STRESS, Subroutine, from code in GROW subroutine
-C-----------------------------------------------------------------------
-C  Plant death due to stress
-C-----------------------------------------------------------------------
-C  REVISION        HISTORY
-C  09/18/1998 CHP  Written based on code in GROW subroutine
-!-----------------------------------------------------------------------
-!  Called by:  GROW
-!  Calls:      None
-C=======================================================================
-      SUBROUTINE STRESS(
-     &  AGEFAC, DWNOD, IDETO, IHARI, NOUTDO, PODWT,       !Input
-     &  RTWT, SDWT, SHELWT, STMWT, TOPWT,                 !Input
-     &  TOTWT, TURFAC, WTLF, YRDOY, YRPLT,                !Input
-     &  MDATE)                                            !Output
-!-----------------------------------------------------------------------
-      IMPLICIT NONE
-!-----------------------------------------------------------------------
-      CHARACTER*1  IDETO, IHARI
-      CHARACTER*78 MESSAGE(10)
-      INTEGER NOUTDO, YRDOY, YRPLT, MDATE, DAP, TIMDIF
-      INTEGER YR, DOY
-      REAL AGEFAC, DWNOD, PODWT, RTWT, SDWT,
-     &  SHELWT, STMWT, TOPWT, TOTWT, TURFAC, WTLF
-
-!-----------------------------------------------------------------------
-!     Set Ending Plant Weights, Dates of Stages if Plants Died
-!-----------------------------------------------------------------------
-      TOTWT  = MAX(0.,TOTWT)
-      TOPWT  = MAX(0.,TOPWT)
-      WTLF   = MAX(0.,WTLF)
-      STMWT  = MAX(0.,STMWT)
-      SDWT   = MAX(0.,SDWT)
-      SHELWT = MAX(0.,SHELWT)
-      RTWT   = MAX(0.,RTWT)
-      PODWT  = MAX(0.,PODWT)
-      DWNOD  = MAX(0.,DWNOD)
-
-      IF (MDATE < 0) THEN
-!        NR8   = MAX(0,TIMDIF(YRSIM,YRDOY))
-        MDATE = YRDOY
-      ENDIF
-C-----------------------------------------------------------------------
-      IF (IHARI == 'M') THEN
-        DAP   = MAX(0,TIMDIF(YRPLT,YRDOY))
-
-        !Message to WARNING.OUT
-        CALL YR_DOY(YRDOY, YR, DOY)
-        WRITE(MESSAGE(1), 100) DAP
-        WRITE(MESSAGE(2), 110) YR, DOY, TURFAC, AGEFAC
-        CALL WARNING(2,'CRPGRO', MESSAGE)
-  100 FORMAT('Plant died due to extreme stress at ',I3,
-     &         ' days after planting.')
-  110 FORMAT('(DAY : ',I4,1X,I3,'; TURFAC : ',F5.2,'; AGEFAC : ',
-     &            F5.2,'  )')
-
-        !Message to screen
-        WRITE (*,275) MESSAGE(1), MESSAGE(2)
-  275   FORMAT(/,2X,A78,/,2X,A78)
-
-        !Message to Overview.out
-        IF (IDETO == 'Y') THEN
-          WRITE (NOUTDO,275) MESSAGE(1), MESSAGE(2)
-        ENDIF
-      ENDIF
-!-----------------------------------------------------------------------
-      RETURN
-      END  ! SUBROUTINE STRESS
-C=======================================================================
-
-C=======================================================================
-C  IPGROW, Subroutine, C. H. Porter
-C-----------------------------------------------------------------------
-C  Reads input data for GROW routines.
-C----------------------------------------------------------------------
-C  REVISION HISTORY
-C  09/15/1998 CHP Written
-C  08/12/2003 CHP Added I/O error checking
-!  11/26/2007 CHP THRESH, SDPRO, SDLIP moved from eco to cul file
-C-----------------------------------------------------------------------
-C  Called : GROW
-C  Calls  : FIND, ERROR, IGNORE
-C=======================================================================
-      SUBROUTINE IPGROW(
-     &  FILEIO, FILECC,  CROP,                            !Input
-     &  ALPHL,  ALPHR,  ALPHS,  ALPHSH,                   !Output
-     &  PCARLF, PCARST, PCARRT, PCARSH, PCARSD, PCARNO,   !Output
-     &  PLIGLF, PLIGST, PLIGRT, PLIGSH, PLIGSD, PLIGNO,   !Output
-     &  PLIPLF, PLIPST, PLIPRT, PLIPSH,         PLIPNO,   !Output
-     &  PMINLF, PMINST, PMINRT, PMINSH, PMINSD, PMINNO,   !Output
-     &  POALF,  POAST,  POART,  POASH,  POASD,  POANO,    !Output
-     &  PROLFF, PROSTF, PRORTF, PROSHF,         PRONOD,   !Output
-     &  PROLFI, PROSTI, PRORTI,                           !Output
-     &  PLTPOP, ROWSPC, RMIN,   PLME,   SDWTPL,           !Output
-     &  SDLIP,  SDPRO,  WTFSD,  WTPSD,   XPODF)           !Output
-
-!-----------------------------------------------------------------------
-      IMPLICIT NONE
-!-----------------------------------------------------------------------
-      CHARACTER*1 PLME, UPCASE
-      CHARACTER*2 XPODF, CROP
-      CHARACTER*6 ERRKEY
-      PARAMETER (ERRKEY = 'IPGROW')
-      CHARACTER*6 SECTION, ECONO  !, ECOTYP
-      CHARACTER*30 FILEIO
-      CHARACTER*80 C80
-      CHARACTER*92 FILECC
-!      CHARACTER*255 C255
-
-      INTEGER LUNCRP, LUNIO, I    !, LUNECO
-      INTEGER ERR, LINC, LNUM, FOUND, ISECT
-
-      REAL ROWSPC, RMIN, PLTPOP, WTFSD, WTPSD,
-     &  SDPRO, SDLIP, SDWTPL,
-     &  ALPHL,  ALPHS,  ALPHR,  ALPHSH,
-     &  PROLFF, PROSTF, PRORTF, PROSHF,                 PRONOD,
-     &  PROLFI, PROSTI, PRORTI,
-     &  PCARLF, PCARST, PCARRT, PCARSH, PCARSD, PCARNO,
-     &  PLIPLF, PLIPST, PLIPRT, PLIPSH,                 PLIPNO,
-     &  PLIGLF, PLIGST, PLIGRT, PLIGSH, PLIGSD, PLIGNO,
-     &  POALF,  POAST,  POART,  POASH,  POASD,  POANO,
-     &  PMINLF, PMINST, PMINRT, PMINSH, PMINSD, PMINNO
-
-!-----------------------------------------------------------------------
-      CALL GETLUN('FILEIO', LUNIO)
-      OPEN (LUNIO, FILE = FILEIO,STATUS = 'OLD',IOSTAT=ERR)
-      IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILEIO,0)
-      LNUM = 0
-!-----------------------------------------------------------------------
-!    Find and read Cultivar Section
-!-----------------------------------------------------------------------
-      SECTION = '*CULTI'
-      CALL FIND(LUNIO, SECTION, LINC, FOUND) ; LNUM = LNUM + LINC
-      IF (FOUND == 0) THEN
-        CALL ERROR(SECTION, 42, FILEIO, LNUM)
-      ELSE
-        READ (LUNIO,'(3X,A2)',IOSTAT=ERR) CROP; LNUM = LNUM + 1
-        IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILEIO,LNUM)
-      ENDIF
-
-      IF (CROP .NE. 'FA') THEN
-!-----------------------------------------------------------------------
-!    Read Planting Details Section
-!-----------------------------------------------------------------------
-        SECTION = '*PLANT'
-        CALL FIND(LUNIO, SECTION, LINC, FOUND) ; LNUM = LNUM + LINC
-        IF (FOUND == 0) THEN
-          CALL ERROR(SECTION, 42, FILEIO, LNUM)
-        ELSE
-          READ(LUNIO,'(24X,F6.1,5X,A1,6X,F6.0,12X,F6.0)',IOSTAT=ERR)
-     &            PLTPOP, PLME, ROWSPC, SDWTPL ; LNUM = LNUM + 1
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILEIO,LNUM)
-        ENDIF
-
-!-----------------------------------------------------------------------
-!    Read Cultivar Section
-!-----------------------------------------------------------------------
-        SECTION = '*CULTI'
-        CALL FIND(LUNIO, SECTION, LINC, FOUND) ; LNUM = LNUM + LINC
-        IF (FOUND == 0) THEN
-          CALL ERROR(SECTION, 42, FILEIO, LNUM)
-        ELSE
-          READ(LUNIO,'(24X,A6,66X,F6.0,24X,2F6.0)',IOSTAT=ERR) 
-     &        ECONO, WTPSD, SDPRO, SDLIP
-          LNUM = LNUM + 1
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILEIO,LNUM)
-        ENDIF
-
-      ENDIF
-  
-      CLOSE (LUNIO)
-
-      IF (CROP .NE. 'FA') THEN
-!-----------------------------------------------------------------------
-!     Read in values from input file, which were previously input
-!       in Subroutine IPCROP.
-!-----------------------------------------------------------------------
-        CALL GETLUN('FILEC', LUNCRP)
-        OPEN (LUNCRP,FILE = FILECC, STATUS = 'OLD',IOSTAT=ERR)
-        IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,0)
-        LNUM = 0
-!-----------------------------------------------------------------------
-!    Find and Read Respiration Section
-!-----------------------------------------------------------------------
-!     Subroutine FIND finds appropriate SECTION in a file by
-!     searching for the specified 6-character string at beginning
-!     of each line.
-!-----------------------------------------------------------------------
-        SECTION = '!*RESP'
-        CALL FIND(LUNCRP, SECTION, LINC, FOUND) ; LNUM = LNUM + LINC
-        IF (FOUND == 0) THEN
-          CALL ERROR(SECTION, 42, FILECC, LNUM)
-        ELSE
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          READ(C80,'(24X,F6.0)',IOSTAT=ERR) RMIN
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-        ENDIF
-  
-        SECTION = '!*PLAN'
-        CALL FIND(LUNCRP, SECTION, LINC, FOUND) ; LNUM = LNUM + LINC
-        IF (FOUND == 0) THEN
-          CALL ERROR(SECTION, 42, FILECC, LNUM)
-        ELSE
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          READ(C80,'(F6.0,6X,2F6.0,6X,F6.0)',IOSTAT=ERR)
-     &                    PROLFI, PROLFF, PROSTI, PROSTF
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-  
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          READ(C80,'(F6.0,6X,F6.0,12X,F6.0)',IOSTAT=ERR)
-     &                    PRORTI, PRORTF, PROSHF
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-  
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          READ(C80,'(12X,F6.0)',IOSTAT=ERR) PRONOD
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-  
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          READ(C80,'(6F6.0)',IOSTAT=ERR)
-     &            PCARLF, PCARST, PCARRT, PCARSH, PCARSD, PCARNO
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-  
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          READ(C80,'(5F6.0)',IOSTAT=ERR)
-     &            PLIPLF, PLIPST, PLIPRT, PLIPSH, PLIPNO
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-  
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          READ(C80,'(6F6.0)',IOSTAT=ERR)
-     &            PLIGLF, PLIGST, PLIGRT, PLIGSH, PLIGSD, PLIGNO
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-  
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          READ(C80,'(6F6.0)',IOSTAT=ERR)
-     &          POALF, POAST, POART, POASH, POASD, POANO
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-  
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          READ(C80,'(6F6.0)',IOSTAT=ERR)
-     &            PMINLF, PMINST, PMINRT, PMINSH, PMINSD, PMINNO
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-        ENDIF
-
-        SECTION = '!*CARB'
-        CALL FIND(LUNCRP, SECTION, LINC, FOUND) ; LNUM = LNUM + LINC
-        IF (FOUND == 0) THEN
-          CALL ERROR(SECTION, 42, FILECC, LNUM)
-        ELSE
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          READ(C80,'(4X,A2)',IOSTAT=ERR) XPODF
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-  
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          READ(C80,'(4F6.0)',IOSTAT=ERR) ALPHL, ALPHS, ALPHR, ALPHSH
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-        ENDIF
-
-        DO I = 1,2
-          XPODF(I:I) = UPCASE(XPODF(I:I))
-        ENDDO
-
-!-----------------------------------------------------------------------
-        SECTION = '!*VEGE'
-        CALL FIND(LUNCRP, SECTION, LINC, FOUND) ; LNUM = LNUM + LINC
-        IF (FOUND == 0) THEN
-          CALL ERROR(SECTION, 42, FILECC, LNUM)
-        ELSE
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          CALL IGNORE(LUNCRP,LNUM,ISECT,C80)
-          READ(C80,'(F6.0)',IOSTAT=ERR) WTFSD
-          IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILECC,LNUM)
-        ENDIF
-  
-        CLOSE (LUNCRP)
-
-!C-----------------------------------------------------------------------
-!C    Read Ecotype Parameter File
-!C-----------------------------------------------------------------------
-!        CALL GETLUN('FILEE', LUNECO)
-!        OPEN (LUNECO,FILE = FILEGC,STATUS = 'OLD',IOSTAT=ERR)
-!        IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILEGC,0)
-!
-!        ECOTYP = '      '
-!        LNUM = 0
-!        DO WHILE (ECOTYP .NE. ECONO)
-!          CALL IGNORE(LUNECO, LNUM, ISECT, C255)
-!        IF (ISECT == 1 .AND. C255(1:1) .NE. ' ' .AND.
-!     &          C255(1:1) .NE. '*') THEN
-!            READ (C255,'(A6,108X,2F6.0)',IOSTAT=ERR)
-!     &        ECOTYP  !, SDPRO, SDLIP
-!            IF (ERR .NE. 0) CALL ERROR(ERRKEY,ERR,FILEGC,LNUM)
-!            IF (ECOTYP == ECONO) THEN
-!              EXIT
-!            ENDIF
-!
-!          ELSE IF (ISECT == 0) THEN
-!            IF (ECONO == 'DFAULT') CALL ERROR(ERRKEY,35,FILEGC,LNUM)
-!            ECONO = 'DFAULT'
-!            REWIND(LUNECO)
-!          LNUM = 0
-!          ENDIF
-!        ENDDO
-! 
-!        CLOSE (LUNECO)
-
-      ENDIF
-!-----------------------------------------------------------------------
-      RETURN
-      END  ! SUBROUTINE IPGROW
+      END SUBROUTINE TG_GROW
 C=======================================================================
 
 !-----------------------------------------------------------------------
@@ -1653,7 +1416,7 @@ C=======================================================================
 ! SDWT     Dry mass of seed tissue, including C and N
 !           (g[seed] / m2[ground])
 ! SDWTAM   Seed weight at maturity (g / m2)
-! SDWTPL   Initial planting material dry weight (kg / ha)
+! SDWTPL   Initial planting material dry weight (tons/ ha)
 ! SECTION  Section name in input file 
 ! SEEDNI   Seed or transplant N at planting (g[N] / m2)
 ! SEEDNO   Total number of seeds (#/m2)

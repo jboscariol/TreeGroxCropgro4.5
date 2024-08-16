@@ -1,5 +1,5 @@
 C=======================================================================
-C  OPHARV, Subroutine G. Hoogenboom, J. W. Jones
+C  TG_OPHARV, Subroutine G. Hoogenboom, J. W. Jones
 C  Generates output for seasonal data.
 C-----------------------------------------------------------------------
 C  REVISION HISTORY
@@ -21,7 +21,7 @@ C  02/09/2007 GH  Add path for FileA
 !  08/28/2009 CHP added EDAT, EDAP 
 C=======================================================================
 
-      SUBROUTINE OPHARV(CONTROL, ISWITCH, 
+      SUBROUTINE TG_OPHARV(CONTROL, ISWITCH, 
      &    AGEFAC, CANHT, CANNAA, CANWAA, CROP,            !Input
      &    HARVFRAC, LAIMX, MDATE, NSTRES, PCLSD, PCNSD,   !Input
      &    PODNO, PODWT, PStres1, PStres2, SDRATE, SDWT,   !Input
@@ -198,10 +198,15 @@ C-----------------------------------------------------------------------
       CALL GETDESC(ACOUNT, OLAB, DESCRIP)
       OLAP = OLAB
 
+      IF (CONTROL%RUN .EQ.1 .OR. INDEX('QPF',CONTROL%RNMODE).LE. 0) THEN												
       BIOMAS = -99.
       VSTAGE = -99.
       WTNCAN = -99.
-      XLAI   = -99.
+	  endif	   
+      ! Add the following if statement by JZW
+      IF (CONTROL%RUN .EQ.1 .OR. INDEX('QPF',CONTROL%RNMODE).LE. 0) THEN											 																
+       XLAI   = -99.
+	  endif   
       YIELD  = -99.
       RSTAGE = -99.
 
@@ -593,135 +598,7 @@ C     Byproduct not harvested is incorporated
       ENDIF
 !***********************************************************************
       RETURN
-      END SUBROUTINE OPHARV
+      END SUBROUTINE TG_OPHARV
 C=======================================================================
 
-
-
-C=======================================================================
-C  STNAMES, Subroutine C.H.Porter
-C  Assigns STNAME for various CROPGRO crops.
-C-----------------------------------------------------------------------
-C  REVISION HISTORY
-C  02/01/2001 CHP Written
-C=======================================================================
-
-      SUBROUTINE STNAMES(CROP, PLME, STNAME)
-
-C-----------------------------------------------------------------------
-      IMPLICIT NONE
-
-      CHARACTER*1  PLME
-      CHARACTER*2  CROP 
-      CHARACTER*10 STNAME(20)
-      INTEGER I
-
-C-----------------------------------------------------------------------
-C     Define names of reproductive phases
-C-----------------------------------------------------------------------
-      DO I = 1,20
-         STNAME(I) = '          '
-      ENDDO
-
-      SELECT CASE (CROP)
-      CASE ('BN','CH','CP','CT','FB','GB','PE','PP','PR',
-     &      'SB','TM','VB','LT')
-        STNAME(1) = 'Emergence '
-        STNAME(2) = 'Unifoliate'
-        STNAME(3) = 'End Juven.'
-        STNAME(4) = 'Flower Ind'
-        STNAME(5) = 'First Flwr'
-        STNAME(6) = 'First Pod '
-        STNAME(7) = 'First Pod '
-        STNAME(8) = 'First Seed'
-        STNAME(9) = 'End Pod   '
-        STNAME(10)= 'Phys. Mat '
-        STNAME(11)= 'Harv. Mat '
-        STNAME(12)= 'End Msnode'
-        STNAME(13)= 'End Leaf  '
-        STNAME(14)= 'Start Sim '
-        STNAME(15)= 'Sowing    '
-        STNAME(16)= 'Harvest   '
-
-      CASE ('PN')
-        STNAME(1) = 'Emergence '
-        STNAME(2) = 'Unifoliate'
-        STNAME(3) = 'End Juven.'
-        STNAME(4) = 'Flower Ind'
-        STNAME(5) = 'First Flwr'
-        STNAME(6) = 'First Peg '
-        STNAME(7) = 'First Pod '
-        STNAME(8) = 'First Seed'
-        STNAME(9) = 'End Pod   '
-        STNAME(10)= 'Phys. Mat '
-        STNAME(11)= 'Harv. Mat '
-        STNAME(12)= 'End Msnode'
-        STNAME(13)= 'End Leaf  '
-        STNAME(14)= 'Start Sim '
-        STNAME(15)= 'Sowing    '
-        STNAME(16)= 'Harvest   '
-
-      CASE ('CB')
-        STNAME( 1) = 'Emergence '
-        STNAME( 2) = 'Unifoliate'
-        STNAME( 3) = 'End Juven.'
-        STNAME( 4) = '          '
-        STNAME( 5) = '          '
-        STNAME( 6) = 'First Head'
-        STNAME( 7) = 'Full Head '
-        STNAME( 8) = '          '
-        STNAME( 9) = '          '
-        STNAME(10) = 'Phys. Mat '
-        STNAME(11) = 'Harv. Mat '
-        STNAME(12) = 'End Msnode'
-        STNAME(13) = 'End Leaf  '
-        STNAME(14) = 'Start Sim '
-        STNAME(15) = 'Sowing    '
-        STNAME(16) = 'Harvest   '
-
-      CASE ('BM','BH','BR','NP')
-         STNAME( 1) = 'Emergence '
-         STNAME( 2) = 'First Leaf'
-         STNAME( 3) = 'End Juven.'
-         STNAME( 4) = 'Flower Ind'
-         STNAME( 5) = 'Flowering '
-         STNAME(10) = 'Phys. Mat '
-         STNAME(11) = 'Harv. Mat '
-         STNAME(12) = 'End Msnode'
-         STNAME(13) = 'End Leaf  '
-         STNAME(14) = 'Start Sim '
-         STNAME(15) = 'Sowing    '
-         STNAME(16) = 'Harvest   '
-
-      CASE ('CO') 
-        STNAME( 1) = 'Emergence '
-        STNAME( 2) = 'First Leaf'
-        STNAME( 3) = 'End Juven.'
-        STNAME( 4) = 'Flower Ind'
-        STNAME( 5) = 'Flowering '
-        STNAME( 6) = 'Boll > 6mm'
-        STNAME( 7) = 'End Flower'
-        STNAME( 8) = 'First Seed'
-        STNAME( 9) = 'Bolls>.5sz'
-        STNAME(10) = 'Cracked Bl'
-        STNAME(11) = '90%Open Bl'
-        STNAME(12) = 'End Msnode'
-        STNAME(13) = 'End Leaf  '
-        STNAME(14) = 'Start Sim '
-        STNAME(15) = 'Sowing    '
-        STNAME(16) = 'Harvest   '                
-
-      CASE ('FA')
-        STNAME(14)= 'Start Sim '
-        STNAME(16)= 'End Sim   '
-
-      END SELECT
-
-      IF (PLME .EQ. 'T') THEN
-        STNAME(15) = 'Transplant'
-      ENDIF
-
-      RETURN
-      END SUBROUTINE STNAMES
-C=======================================================================
 
